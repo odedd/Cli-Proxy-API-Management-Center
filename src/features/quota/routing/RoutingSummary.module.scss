@@ -1,0 +1,189 @@
+@use '../../../styles/mixins' as *;
+
+/* 路由条 + 路由提供商余量卡：与额度卡同纸面（14px 圆角 / 1px 边框），遥测一律 mono。 */
+
+.routing {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 22px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-secondary) 70%, transparent);
+  font-size: 13px;
+}
+
+.stripTitle {
+  font-family: $font-mono;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.stripItem {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.stripLabel {
+  color: var(--text-secondary);
+}
+
+.stripValue {
+  font-family: $font-mono;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.stripServing {
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.stripRules {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 14px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-primary) 82%, transparent);
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cardName {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.cardIcon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+.cardCount {
+  font-family: $font-mono;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.metricRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
+.metricLabel {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.metric {
+  font-family: $font-mono;
+  font-variant-numeric: tabular-nums;
+}
+
+.metricValue {
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.metricOf {
+  margin-left: 6px;
+  font-family: $font-mono;
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.segments {
+  display: flex;
+  gap: 5px;
+}
+
+.segment {
+  position: relative;
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--bg-tertiary);
+}
+
+.segmentServing {
+  outline: 1px solid var(--primary-color);
+  outline-offset: 1px;
+}
+
+.segmentFill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 4px;
+}
+
+.fillHigh {
+  background: var(--viz-success);
+}
+
+.fillMedium {
+  background: var(--quota-medium-color);
+}
+
+.fillLow {
+  background: var(--viz-failure);
+}
+
+.cardNote {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.cardFoot {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+}
+
+.footValue {
+  font-family: $font-mono;
+  font-size: 13px;
+  color: var(--text-primary);
+}

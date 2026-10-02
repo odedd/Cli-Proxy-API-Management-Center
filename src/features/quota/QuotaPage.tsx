@@ -19,7 +19,7 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { useNow } from '@/hooks/useNow';
 import { useRevealGroup } from '@/hooks/motion';
-import { useAuthStore, useQuotaStore, useThemeStore } from '@/stores';
+import { useAuthStore, useConfigStore, useQuotaStore, useThemeStore } from '@/stores';
 import type { AuthFileItem, ResolvedTheme } from '@/types';
 import { getQuotaCacheKey } from '@/utils/quota/identity';
 import { ProviderTabs } from '@/features/authFiles/components/ProviderTabs';
@@ -49,6 +49,14 @@ import { QUOTA_ADAPTERS, getQuotaSetter, type QuotaCardState } from './providers
 import type { QuotaProviderType } from './providers/types';
 import { useDevinQuotaAutoLoad } from './providers/devin/useDevinQuotaAutoLoad';
 import { useQuotaActions } from './hooks/useQuotaActions';
+import {
+  ROUTED_PROVIDERS,
+  buildRoutingSummary,
+  routingStatusByName,
+  type RoutingProviderSummary,
+} from './routing/model';
+import { RoutingSummary } from './routing/RoutingSummary';
+import { useRoutedQuotaAutoLoad } from './routing/useRoutedQuotaAutoLoad';
 import { useQuotaBatchLoader } from './hooks/useQuotaBatchLoader';
 import { readQuotaUiState, writeQuotaUiState } from './uiState';
 import styles from './QuotaPage.module.scss';
@@ -72,7 +80,7 @@ export function QuotaPage() {
   const [error, setError] = useState('');
   const [tab, setTab] = useState<QuotaTabId>(() => readQuotaUiState()?.tab ?? 'all');
   const [sortMode, setSortMode] = useState<QuotaSortMode>(
-    () => readQuotaUiState()?.sortMode ?? 'default'
+    () => readQuotaUiState()?.sortMode ?? 'priority'
   );
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -81,6 +89,14 @@ export function QuotaPage() {
   const revealRef = useRevealGroup<HTMLDivElement>();
 
   const disableControls = connectionStatus !== 'connected';
+
+  const routingStrategy = useConfigStore((state) => state.config?.routingStrategy ?? null);
+  const fetchConfig = useConfigStore((state) => state.fetchConfig);
+  useEffect(() => {
+    if (connectionStatus !== 'connected') return;
+    // Cached with a TTL in the store; failure just leaves the strategy unknown.
+    fetchConfig().catch(() => undefined);
+  }, [connectionStatus, fetchConfig]);
 
   /* ---------- 文件列表 ---------- */
 
@@ -156,10 +172,10 @@ export function QuotaPage() {
 
   /* ---------- 归类 / 过滤 / 排序 / 分页 ---------- */
 
-  // 只在「最快恢复优先」下订阅分钟时钟。默认序下不门控的话，pageItems 每分钟
+  // 只在「最快恢复优先」下订阅分钟时钟。其他序下不门控的话，pageItems 每分钟
   // 换一次身份，会反复空转下面那个「刷新全部」的 loading 下降沿 effect。
-  const tick = useNow(sortMode !== 'default');
-  const sortNow = sortMode === 'default' ? 0 : tick;
+  const tick = useNow(sortMode === 'soonest');
+  const sortNow = sortMode === 'soonest' ? tick : 0;
 
   const entries = useMemo(() => classifyQuotaFiles(files), [files]);
   const tabCounts = useMemo(() => buildTabCounts(entries), [entries]);
@@ -167,6 +183,18 @@ export function QuotaPage() {
     () => filterEntriesBySearch(filterEntriesByTab(entries, tab), search),
     [entries, tab, search]
   );
+  /* ---------- 路由视图（Claude / Codex） ----------
+   * 基于全部条目而非当前页：服务中的凭证可能不在本页。 */
+  const routingNow = useNow();
+  const routingSummaries = useMemo<RoutingProviderSummary[]>(
+    () =>
+      ROUTED_PROVIDERS.filter(
+        (type) => (tab === 'all' || tab === type) && entries.some((entry) => entry.type === type)
+      ).map((type) => buildRoutingSummary(type, entries, getQuota, routingNow)),
+    [entries, getQuota, routingNow, tab]
+  );
+  const routingByName = useMemo(() => routingStatusByName(routingSummaries), [routingSummaries]);
+
   const handleSearchChange = useCallback((value: string) => {
     setSearch(value);
     setPage(1);
@@ -288,6 +316,16 @@ export function QuotaPage() {
     loadQuota
   );
 
+  useRoutedQuotaAutoLoad(
+    entries,
+    disableControls ||
+      loading ||
+      batchLoading ||
+      Boolean(error) ||
+      filesGeneration !== sessionGeneration,
+    loadQuota
+  );
+
   const canUseActions = !disableControls && !loading && filesGeneration === sessionGeneration;
 
   /* ---------- 首屏卡片一次性级联入场 ----------
@@ -334,6 +372,13 @@ export function QuotaPage() {
             onChange={handleTabChange}
           />
         </div>
+
+        <RoutingSummary
+          summaries={routingSummaries}
+          strategy={routingStrategy}
+          resolvedTheme={resolvedTheme}
+          now={routingNow}
+        />
 
         <div className={styles.toolbar}>
           <div className={styles.search}>
@@ -424,6 +469,7 @@ export function QuotaPage() {
                 canRefresh={canUseActions && !entry.file.disabled}
                 resetting={resettingQuotaName === getQuotaCacheKey(entry.file)}
                 entranceDelayMs={cardEntranceDelay(index)}
+                routing={routingByName.get(entry.file.name)}
                 onRefresh={() => void refreshQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
                 onReset={() => resetQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
               />
