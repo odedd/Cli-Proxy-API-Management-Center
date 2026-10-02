@@ -1,13 +1,11 @@
 /**
  * Ranked rows for one routed provider: rank, account, routing pill, then the two
  * windows routing decides on (5-hour, weekly) as used-percent meters with the
- * 95% thresholds marked. The full provider card (plan, credits, reset grants,
- * extra windows) opens inline under its row.
+ * 95% thresholds marked.
  */
 
-import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { IconChevronDown, IconRefreshCw } from '@/components/ui/icons';
+import { IconRefreshCw } from '@/components/ui/icons';
 import type { ResolvedTheme } from '@/types';
 import { buildResetDisplay, resolveQuotaErrorMessage } from '@/utils/quota';
 import { getQuotaDisplayName } from '@/utils/quota/identity';
@@ -15,6 +13,7 @@ import { getAuthFileIcon, getTypeLabel } from '@/features/authFiles/constants';
 import {
   FIVE_HOUR_CAP_PERCENT,
   WEEKLY_RESERVE_PERCENT,
+  maskEmail,
   type RoutingRow,
   type RoutingWindow,
   type RoutedProvider,
@@ -28,8 +27,6 @@ export type RoutingRowsItem = {
   errorStatus?: number;
   canRefresh: boolean;
   onRefresh: () => void;
-  /** The full provider card, shown when the row is expanded. */
-  details: ReactNode;
 };
 
 export type RoutingRowsProps = {
@@ -37,23 +34,15 @@ export type RoutingRowsProps = {
   items: RoutingRowsItem[];
   resolvedTheme: ResolvedTheme;
   now: number;
+  showEmails: boolean;
 };
 
 const usedClass = (used: number, threshold: number): string =>
   used >= threshold ? styles.fillLow : used >= 70 ? styles.fillMedium : styles.fillHigh;
 
-export function RoutingRows({ type, items, resolvedTheme, now }: RoutingRowsProps) {
+export function RoutingRows({ type, items, resolvedTheme, now, showEmails }: RoutingRowsProps) {
   const { t, i18n } = useTranslation();
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   if (items.length === 0) return null;
-
-  const toggle = (name: string) =>
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
-    });
 
   const resetText = (atMs: number | null) => {
     const display = buildResetDisplay(null, atMs, now, i18n.resolvedLanguage);
@@ -120,9 +109,8 @@ export function RoutingRows({ type, items, resolvedTheme, now }: RoutingRowsProp
           const { row } = item;
           const file = row.entry.file;
           const name = file.name;
-          const email = typeof file.email === 'string' && file.email.trim() ? file.email : null;
-          const isOpen = expanded.has(name);
-          const detailsId = `routing-details-${type}-${index}`;
+          const rawEmail = typeof file.email === 'string' && file.email.trim() ? file.email : null;
+          const email = rawEmail && !showEmails ? maskEmail(rawEmail) : rawEmail;
           return (
             <li
               key={name}
@@ -200,26 +188,8 @@ export function RoutingRows({ type, items, resolvedTheme, now }: RoutingRowsProp
                       className={item.quotaStatus === 'loading' ? styles.spinning : undefined}
                     />
                   </button>
-                  <button
-                    type="button"
-                    className={styles.detailsButton}
-                    onClick={() => toggle(name)}
-                    aria-expanded={isOpen}
-                    aria-controls={detailsId}
-                  >
-                    {t('quota_routing.details')}
-                    <IconChevronDown
-                      size={14}
-                      className={isOpen ? styles.chevronOpen : styles.chevron}
-                    />
-                  </button>
                 </div>
               </div>
-              {isOpen && (
-                <div id={detailsId} className={styles.details}>
-                  {item.details}
-                </div>
-              )}
             </li>
           );
         })}

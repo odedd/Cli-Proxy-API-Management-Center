@@ -148,3 +148,9 @@ export function routingStatusByName(summaries: RoutingProviderSummary[]): Map<st
   summaries.forEach((summary) => summary.rows.forEach((row) => map.set(row.entry.file.name, row)));
   return map;
 }
+
+/** `davidovoded@gmail.com` → `d•••@gmail.com`; non-emails pass through. */
+export const maskEmail = (value: string): string => {
+  const at = value.indexOf('@');
+  return at > 0 ? `${value.slice(0, 1)}•••${value.slice(at)}` : value;
+};

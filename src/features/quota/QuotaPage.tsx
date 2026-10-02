@@ -181,6 +181,14 @@ export function QuotaPage() {
 
   const entries = useMemo(() => classifyQuotaFiles(files), [files]);
   const tabCounts = useMemo(() => buildTabCounts(entries), [entries]);
+  // Only providers that have credentials get a tab; search/sort only once paging kicks in.
+  const visibleTabs = useMemo(
+    () => TAB_IDS.filter((id) => id === 'all' || id === tab || (tabCounts[id] ?? 0) > 0),
+    [tab, tabCounts]
+  );
+  const showToolbar = entries.length > QUOTA_PAGE_SIZE;
+  const effectiveSort: QuotaSortMode = showToolbar ? sortMode : 'priority';
+  const [showEmails, setShowEmails] = useState(false);
   const filteredEntries = useMemo(
     () => filterEntriesBySearch(filterEntriesByTab(entries, tab), search),
     [entries, tab, search]
@@ -208,8 +216,8 @@ export function QuotaPage() {
   );
   // 排序在分页之前：否则「最快恢复」只在当前页内成立。
   const sortedEntries = useMemo(
-    () => sortQuotaEntries(filteredEntries, sortMode, resolveNextRecovery),
-    [filteredEntries, sortMode, resolveNextRecovery]
+    () => sortQuotaEntries(filteredEntries, effectiveSort, resolveNextRecovery),
+    [filteredEntries, effectiveSort, resolveNextRecovery]
   );
 
   const { pageItems, currentPage, totalPages } = useMemo(
@@ -349,10 +357,9 @@ export function QuotaPage() {
   };
 
   /* ---------- 路由排名行 ----------
-   * 路由优先级排序下，Claude / Codex 以排名行呈现（完整卡片在行内展开），
-   * 其他提供商仍走卡片网格。其他排序保持原网格。 */
+   * 路由优先级排序下，Claude / Codex 以排名行呈现，其他提供商仍走卡片网格。 */
 
-  const showRoutingRows = sortMode === 'priority';
+  const showRoutingRows = effectiveSort === 'priority';
   const filteredNames = useMemo(
     () => new Set(filteredEntries.map((entry) => entry.file.name)),
     [filteredEntries]
@@ -363,8 +370,7 @@ export function QuotaPage() {
     [pageItems, showRoutingRows]
   );
 
-  // Cards opened under a routing row skip the pill: the row already shows it.
-  const renderCard = (entry: QuotaFileEntry, entranceDelayMs: number | null, inRow = false) => (
+  const renderCard = (entry: QuotaFileEntry, entranceDelayMs: number | null) => (
     <QuotaCard
       key={`${entry.type}:${getQuotaCacheKey(entry.file)}`}
       entry={entry}
@@ -373,7 +379,7 @@ export function QuotaPage() {
       canRefresh={canUseActions && !entry.file.disabled}
       resetting={resettingQuotaName === getQuotaCacheKey(entry.file)}
       entranceDelayMs={entranceDelayMs}
-      routing={inRow ? undefined : routingByName.get(entry.file.name)}
+      routing={routingByName.get(entry.file.name)}
       onRefresh={() => void refreshQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
       onReset={() => resetQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
     />
@@ -392,13 +398,18 @@ export function QuotaPage() {
         refreshing={loading || batchLoading}
         disableControls={disableControls}
         onRefreshAll={handleRefreshAll}
+        extraActions={
+          <Button variant="secondary" size="sm" onClick={() => setShowEmails((v) => !v)}>
+            {showEmails ? t('quota_routing.hide_emails') : t('quota_routing.show_emails')}
+          </Button>
+        }
       />
 
       <section className={styles.workbench}>
         {/* 提供商导航与搜索工具栏分层，避免不同控件争夺视觉焦点。 */}
         <div className={styles.tabsRow} data-reveal>
           <ProviderTabs
-            types={TAB_IDS}
+            types={visibleTabs}
             counts={tabCounts}
             active={tab}
             resolvedTheme={resolvedTheme}
@@ -409,47 +420,50 @@ export function QuotaPage() {
         <RoutingSummary
           summaries={routingSummaries}
           strategy={routingStrategy}
+          showEmails={showEmails}
           resolvedTheme={resolvedTheme}
           now={routingNow}
         />
 
-        <div className={styles.toolbar}>
-          <div className={styles.search}>
-            <IconSearch size={16} className={styles.searchIcon} aria-hidden="true" />
-            <input
-              ref={searchInputRef}
-              className={styles.searchInput}
-              type="search"
-              value={search}
-              onChange={(event) => handleSearchChange(event.target.value)}
-              placeholder={t('quota_management.search_placeholder')}
-              aria-label={t('quota_management.search_label')}
-            />
-            {search && (
-              <button
-                type="button"
-                className={styles.clearSearch}
-                aria-label={t('quota_management.search_clear')}
-                title={t('quota_management.search_clear')}
-                onClick={() => {
-                  handleSearchChange('');
-                  searchInputRef.current?.focus();
-                }}
-              >
-                <IconX size={14} aria-hidden="true" />
-              </button>
-            )}
+        {showToolbar && (
+          <div className={styles.toolbar}>
+            <div className={styles.search}>
+              <IconSearch size={16} className={styles.searchIcon} aria-hidden="true" />
+              <input
+                ref={searchInputRef}
+                className={styles.searchInput}
+                type="search"
+                value={search}
+                onChange={(event) => handleSearchChange(event.target.value)}
+                placeholder={t('quota_management.search_placeholder')}
+                aria-label={t('quota_management.search_label')}
+              />
+              {search && (
+                <button
+                  type="button"
+                  className={styles.clearSearch}
+                  aria-label={t('quota_management.search_clear')}
+                  title={t('quota_management.search_clear')}
+                  onClick={() => {
+                    handleSearchChange('');
+                    searchInputRef.current?.focus();
+                  }}
+                >
+                  <IconX size={14} aria-hidden="true" />
+                </button>
+              )}
+            </div>
+            <div className={styles.sort}>
+              <Select
+                value={sortMode}
+                options={sortOptions}
+                onChange={handleSortModeChange}
+                ariaLabel={t('quota_management.sort_label')}
+                size="sm"
+              />
+            </div>
           </div>
-          <div className={styles.sort}>
-            <Select
-              value={sortMode}
-              options={sortOptions}
-              onChange={handleSortModeChange}
-              ariaLabel={t('quota_management.sort_label')}
-              size="sm"
-            />
-          </div>
-        </div>
+        )}
 
         {error && (
           <div className={styles.errorBanner} role="alert">
@@ -500,6 +514,7 @@ export function QuotaPage() {
                   type={summary.type}
                   resolvedTheme={resolvedTheme}
                   now={routingNow}
+                  showEmails={showEmails}
                   items={summary.rows
                     .filter((row) => filteredNames.has(row.entry.file.name))
                     .map((row) => {
@@ -512,7 +527,6 @@ export function QuotaPage() {
                         errorStatus: quota?.errorStatus,
                         canRefresh: canUseActions && !entry.file.disabled,
                         onRefresh: () => void refreshQuota(entry.file, QUOTA_ADAPTERS[entry.type]),
-                        details: renderCard(entry, null, true),
                       };
                     })}
                 />

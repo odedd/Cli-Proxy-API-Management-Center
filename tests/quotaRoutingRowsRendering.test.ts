@@ -59,11 +59,16 @@ describe('RoutingRows', () => {
       quotaStatus: 'success',
       canRefresh: true,
       onRefresh: () => undefined,
-      details: null,
     }));
 
     const html = renderToStaticMarkup(
-      createElement(RoutingRows, { type: 'claude', items, resolvedTheme: 'dark', now })
+      createElement(RoutingRows, {
+        type: 'claude',
+        items,
+        resolvedTheme: 'dark',
+        now,
+        showEmails: true,
+      })
     );
 
     expect(html.indexOf('top@example.com')).toBeLessThan(html.indexOf('res@example.com'));
@@ -73,7 +78,6 @@ describe('RoutingRows', () => {
     expect(html).toContain('33% used');
     expect(html).toContain('98% used');
     expect(html).toContain('No window running');
-    expect(html).toContain('aria-expanded="false"');
     expect(html).toContain('aria-label="Refresh quota for top@example.com"');
   });
 
@@ -89,6 +93,7 @@ describe('RoutingRows', () => {
         type: 'claude',
         resolvedTheme: 'light',
         now,
+        showEmails: false,
         items: [
           {
             row: summary.rows[0],
@@ -96,7 +101,6 @@ describe('RoutingRows', () => {
             error: 'boom',
             canRefresh: true,
             onRefresh: () => undefined,
-            details: null,
           },
         ],
       })
@@ -104,5 +108,7 @@ describe('RoutingRows', () => {
     expect(html).toContain('role="alert"');
     expect(html).toContain('boom');
     expect(html).not.toContain('% used');
+    expect(html).toContain('x•••@example.com');
+    expect(html).not.toContain('x@example.com');
   });
 });

@@ -1600,11 +1600,11 @@
     "of_capacity": "из {{capacity}}%",
     "not_loaded": "Использование не загружено",
     "segment_title": "{{name}} · осталось {{remaining}}% за неделю",
-    "next_weekly_reset": "Следующий недельный сброс {{when}} · {{name}}",
+    "next_weekly_reset": "Следующий недельный сброс {{when}}",
     "no_weekly_reset": "Время недельного сброса не сообщено",
-    "five_hour_serving": "5 ч у обслуживающей записи",
-    "five_hour_left": "осталось {{remaining}}%",
-    "five_hour_none": "Без 5-часового лимита",
+    "five_hour_serving": "Запас на 5 ч сейчас",
+    "five_hour_left": "{{remaining}}% у обслуживающей записи",
+    "five_hour_none": "нет (только недельный)",
     "five_hour_idle": "Окно не запущено",
     "status_serving": "Обслуживает",
     "status_next": "Далее",
@@ -1618,7 +1618,8 @@
     "ranked_by_priority": "по приоритету маршрутизации",
     "loading": "Загрузка использования…",
     "refresh_account": "Обновить квоту для {{name}}",
-    "details": "Подробнее"
+    "show_emails": "Показать email",
+    "hide_emails": "Скрыть email"
   },
   "plugin_management": {
     "title": "Управление плагинами",

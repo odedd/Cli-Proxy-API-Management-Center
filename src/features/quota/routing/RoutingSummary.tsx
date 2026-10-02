@@ -14,6 +14,7 @@ import { getAuthFileIcon, getTypeLabel } from '@/features/authFiles/constants';
 import {
   FIVE_HOUR_CAP_PERCENT,
   WEEKLY_RESERVE_PERCENT,
+  maskEmail,
   type RoutingProviderSummary,
   type RoutingRow,
 } from './model';
@@ -24,12 +25,15 @@ export type RoutingSummaryProps = {
   strategy: string | null;
   resolvedTheme: ResolvedTheme;
   now: number;
+  showEmails: boolean;
 };
 
 /** The strip and notes name accounts; the email reads better than the auth filename. */
-const accountLabel = (row: RoutingRow): string =>
-  (typeof row.entry.file.email === 'string' && row.entry.file.email.trim()) ||
-  getQuotaDisplayName(row.entry.file);
+const accountLabel = (row: RoutingRow, showEmails: boolean): string => {
+  const email = typeof row.entry.file.email === 'string' ? row.entry.file.email.trim() : '';
+  if (!email) return getQuotaDisplayName(row.entry.file);
+  return showEmails ? email : maskEmail(email);
+};
 
 const remainingClass = (remaining: number): string =>
   remaining >= 30
@@ -38,7 +42,13 @@ const remainingClass = (remaining: number): string =>
       ? styles.fillMedium
       : styles.fillLow;
 
-export function RoutingSummary({ summaries, strategy, resolvedTheme, now }: RoutingSummaryProps) {
+export function RoutingSummary({
+  summaries,
+  strategy,
+  resolvedTheme,
+  now,
+  showEmails,
+}: RoutingSummaryProps) {
   const { t, i18n } = useTranslation();
   if (summaries.length === 0) return null;
 
@@ -49,7 +59,7 @@ export function RoutingSummary({ summaries, strategy, resolvedTheme, now }: Rout
   };
 
   const servingLabel = (row: RoutingRow | null) =>
-    row ? accountLabel(row) : t('quota_routing.none_available');
+    row ? accountLabel(row, showEmails) : t('quota_routing.none_available');
 
   return (
     <section className={styles.routing} aria-label={t('quota_routing.title')}>
@@ -111,7 +121,7 @@ export function RoutingSummary({ summaries, strategy, resolvedTheme, now }: Rout
               <div className={styles.segments}>
                 {summary.rows.map((row) => {
                   const remaining = row.loaded ? 100 - (row.weekly?.usedPercent ?? 0) : null;
-                  const name = accountLabel(row);
+                  const name = accountLabel(row, showEmails);
                   return (
                     <span
                       key={row.entry.file.name}
@@ -138,10 +148,7 @@ export function RoutingSummary({ summaries, strategy, resolvedTheme, now }: Rout
 
               <div className={styles.cardNote}>
                 {nextReset
-                  ? t('quota_routing.next_weekly_reset', {
-                      when: resetText(nextReset.atMs),
-                      name: accountLabel(nextReset.row),
-                    })
+                  ? t('quota_routing.next_weekly_reset', { when: resetText(nextReset.atMs) })
                   : t('quota_routing.no_weekly_reset')}
               </div>
 

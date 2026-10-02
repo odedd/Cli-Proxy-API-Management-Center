@@ -221,8 +221,8 @@
   gap: 8px;
 }
 
-.iconButton,
-.detailsButton {
+.iconButton {
+  width: 36px;
   min-height: 36px;
   display: inline-flex;
   align-items: center;
@@ -251,23 +251,6 @@
   }
 }
 
-.iconButton {
-  width: 36px;
-}
-
-.detailsButton {
-  padding: 0 10px;
-}
-
-.chevron,
-.chevronOpen {
-  transition: transform var(--dur-hover, 200ms) ease;
-}
-
-.chevronOpen {
-  transform: rotate(180deg);
-}
-
 .spinning {
   animation: routing-spin 0.8s linear infinite;
 }
@@ -281,20 +264,5 @@
 @media (prefers-reduced-motion: reduce) {
   .spinning {
     animation: none;
-  }
-
-  .chevron,
-  .chevronOpen {
-    transition: none;
-  }
-}
-
-.details {
-  padding: 0 20px 18px 56px;
-}
-
-@media (max-width: 640px) {
-  .details {
-    padding-left: 20px;
   }
 }

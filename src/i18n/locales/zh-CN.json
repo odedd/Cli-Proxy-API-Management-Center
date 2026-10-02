@@ -1595,11 +1595,11 @@
     "of_capacity": "/ {{capacity}}%",
     "not_loaded": "用量未加载",
     "segment_title": "{{name}} · 本周剩余 {{remaining}}%",
-    "next_weekly_reset": "下次周重置 {{when}} · {{name}}",
+    "next_weekly_reset": "下次周重置 {{when}}",
     "no_weekly_reset": "未报告周重置时间",
-    "five_hour_serving": "服务中凭证的 5 小时额度",
-    "five_hour_left": "剩余 {{remaining}}%",
-    "five_hour_none": "无 5 小时限制",
+    "five_hour_serving": "当前 5 小时余量",
+    "five_hour_left": "服务中凭证剩余 {{remaining}}%",
+    "five_hour_none": "无（仅周额度）",
     "five_hour_idle": "窗口未开始",
     "status_serving": "服务中",
     "status_next": "候补",
@@ -1613,7 +1613,8 @@
     "ranked_by_priority": "按路由优先级排序",
     "loading": "正在加载用量…",
     "refresh_account": "刷新 {{name}} 的额度",
-    "details": "详情"
+    "show_emails": "显示邮箱",
+    "hide_emails": "隐藏邮箱"
   },
   "plugin_management": {
     "title": "插件管理",
