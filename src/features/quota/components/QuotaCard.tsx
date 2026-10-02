@@ -23,6 +23,7 @@ import { bindQuotaClasses } from '../types';
 import { QUOTA_ADAPTERS, type QuotaCardState } from '../providers';
 import { isQuotaRefreshDisabled, type QuotaFileEntry } from '../logic';
 import { useClaudeResetGrants } from '../providers/claude/ClaudeResetGrants';
+import type { RoutingRow } from '../routing/model';
 import bodyStyles from './QuotaBody.module.scss';
 import styles from './QuotaCard.module.scss';
 
@@ -37,6 +38,8 @@ export type QuotaCardProps = {
   resetting: boolean;
   /** 首屏级联入场延迟；null = 不入场（切 tab / 翻页 / 刷新新挂载的卡片）。 */
   entranceDelayMs?: number | null;
+  /** Routing position for routed providers (Claude, Codex); absent elsewhere. */
+  routing?: RoutingRow;
   onRefresh: () => void;
   onReset: () => void;
 };
@@ -49,6 +52,7 @@ export function QuotaCard(props: QuotaCardProps) {
     canRefresh,
     resetting,
     entranceDelayMs,
+    routing,
     onRefresh,
     onReset,
   } = props;
@@ -88,7 +92,9 @@ export function QuotaCard(props: QuotaCardProps) {
 
   return (
     <article
-      className={`${styles.card} ${mountEntranceDelayMs === null ? '' : styles.cardEnter}`}
+      className={`${styles.card} ${mountEntranceDelayMs === null ? '' : styles.cardEnter} ${
+        routing?.status === 'serving' ? styles.cardServing : ''
+      }`}
       style={entranceStyle}
     >
       <header className={styles.head}>
@@ -110,6 +116,18 @@ export function QuotaCard(props: QuotaCardProps) {
         <span className={styles.fileName} title={displayName}>
           {displayName}
         </span>
+        {routing && (
+          <span className={styles.routingMeta}>
+            {routing.status !== 'unknown' && (
+              <span className={`${styles.routingPill} ${styles[`routing_${routing.status}`]}`}>
+                {t(`quota_routing.status_${routing.status}`)}
+              </span>
+            )}
+            <span className={styles.routingPriority} title={t('quota_routing.priority_hint')}>
+              p{routing.priority}
+            </span>
+          </span>
+        )}
       </header>
 
       <div className={styles.body}>

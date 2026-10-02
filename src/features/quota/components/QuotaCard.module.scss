@@ -308,3 +308,54 @@
     animation: none;
   }
 }
+
+/* ---------- 路由：服务中高亮 + 状态药丸 + priority ---------- */
+
+.cardServing {
+  border-color: color-mix(in srgb, var(--primary-color) 70%, var(--border-color));
+  box-shadow: inset 3px 0 0 var(--primary-color);
+}
+
+.routingMeta {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.routingPill {
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.routing_serving {
+  border-color: var(--primary-color);
+  background: var(--primary-color);
+  color: var(--primary-contrast, #fff);
+}
+
+.routing_next {
+  border-color: var(--border-color);
+  color: var(--text-secondary);
+}
+
+.routing_reserve {
+  color: var(--quota-medium-color);
+}
+
+.routing_capped {
+  color: var(--viz-failure);
+}
+
+.routingPriority {
+  font-family: $font-mono;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}

@@ -13,6 +13,7 @@ import { META_CONFIG } from './providers/meta/data';
 import { XAI_CONFIG } from './providers/xai/data';
 import type { QuotaProviderType } from './providers/types';
 import { QUOTA_TAB_ORDER, type QuotaSortMode, type QuotaTabId } from './constants';
+import { compareRoutingOrder } from './routing/model';
 
 const QUOTA_FILTER_MAP: Record<QuotaProviderType, (file: AuthFileItem) => boolean> = {
   antigravity: ANTIGRAVITY_CONFIG.filterFn,
@@ -98,6 +99,11 @@ export function sortQuotaEntries(
   mode: QuotaSortMode,
   resolveNextRecoveryMs: (entry: QuotaFileEntry) => number | null
 ): QuotaFileEntry[] {
+  if (mode === 'priority') {
+    // Provider groups keep QUOTA_TAB_ORDER; inside a group, the backend's pick order.
+    const group = (entry: QuotaFileEntry) => QUOTA_TAB_ORDER.indexOf(entry.type);
+    return [...entries].sort((a, b) => group(a) - group(b) || compareRoutingOrder(a, b));
+  }
   if (mode !== 'soonest') return [...entries];
 
   // Decorate once — resolving pokes at provider-shaped state per entry.
