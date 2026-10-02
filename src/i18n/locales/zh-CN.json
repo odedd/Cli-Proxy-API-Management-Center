@@ -1605,7 +1605,15 @@
     "status_next": "候补",
     "status_reserve": "保留",
     "status_capped": "已封顶",
-    "priority_hint": "路由优先级：可用凭证中优先级最高者处理请求"
+    "priority_hint": "路由优先级：可用凭证中优先级最高者处理请求",
+    "used_percent": "已用 {{used}}%",
+    "threshold_hint": "路由阈值 {{threshold}}%",
+    "five_hour": "5 小时",
+    "weekly": "每周",
+    "ranked_by_priority": "按路由优先级排序",
+    "loading": "正在加载用量…",
+    "refresh_account": "刷新 {{name}} 的额度",
+    "details": "详情"
   },
   "plugin_management": {
     "title": "插件管理",

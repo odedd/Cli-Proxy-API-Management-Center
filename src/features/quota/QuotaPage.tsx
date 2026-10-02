@@ -52,9 +52,11 @@ import { useQuotaActions } from './hooks/useQuotaActions';
 import {
   ROUTED_PROVIDERS,
   buildRoutingSummary,
+  isRoutedProvider,
   routingStatusByName,
   type RoutingProviderSummary,
 } from './routing/model';
+import { RoutingRows } from './routing/RoutingRows';
 import { RoutingSummary } from './routing/RoutingSummary';
 import { useRoutedQuotaAutoLoad } from './routing/useRoutedQuotaAutoLoad';
 import { useQuotaBatchLoader } from './hooks/useQuotaBatchLoader';
@@ -346,6 +348,37 @@ export function QuotaPage() {
     return Math.round((index / (pageItems.length - 1)) * CARD_ENTRANCE_BUDGET_MS);
   };
 
+  /* ---------- 路由排名行 ----------
+   * 路由优先级排序下，Claude / Codex 以排名行呈现（完整卡片在行内展开），
+   * 其他提供商仍走卡片网格。其他排序保持原网格。 */
+
+  const showRoutingRows = sortMode === 'priority';
+  const filteredNames = useMemo(
+    () => new Set(filteredEntries.map((entry) => entry.file.name)),
+    [filteredEntries]
+  );
+  const gridItems = useMemo(
+    () =>
+      showRoutingRows ? pageItems.filter((entry) => !isRoutedProvider(entry.type)) : pageItems,
+    [pageItems, showRoutingRows]
+  );
+
+  // Cards opened under a routing row skip the pill: the row already shows it.
+  const renderCard = (entry: QuotaFileEntry, entranceDelayMs: number | null, inRow = false) => (
+    <QuotaCard
+      key={`${entry.type}:${getQuotaCacheKey(entry.file)}`}
+      entry={entry}
+      quota={getQuota(entry)}
+      resolvedTheme={resolvedTheme}
+      canRefresh={canUseActions && !entry.file.disabled}
+      resetting={resettingQuotaName === getQuotaCacheKey(entry.file)}
+      entranceDelayMs={entranceDelayMs}
+      routing={inRow ? undefined : routingByName.get(entry.file.name)}
+      onRefresh={() => void refreshQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
+      onReset={() => resetQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
+    />
+  );
+
   /* ---------- 渲染 ---------- */
 
   const isEmpty = !loading && filteredEntries.length === 0;
@@ -459,22 +492,37 @@ export function QuotaPage() {
             }
           />
         ) : (
-          <div className={styles.grid}>
-            {pageItems.map((entry, index) => (
-              <QuotaCard
-                key={`${entry.type}:${getQuotaCacheKey(entry.file)}`}
-                entry={entry}
-                quota={getQuota(entry)}
-                resolvedTheme={resolvedTheme}
-                canRefresh={canUseActions && !entry.file.disabled}
-                resetting={resettingQuotaName === getQuotaCacheKey(entry.file)}
-                entranceDelayMs={cardEntranceDelay(index)}
-                routing={routingByName.get(entry.file.name)}
-                onRefresh={() => void refreshQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
-                onReset={() => resetQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
-              />
-            ))}
-          </div>
+          <>
+            {showRoutingRows &&
+              routingSummaries.map((summary) => (
+                <RoutingRows
+                  key={summary.type}
+                  type={summary.type}
+                  resolvedTheme={resolvedTheme}
+                  now={routingNow}
+                  items={summary.rows
+                    .filter((row) => filteredNames.has(row.entry.file.name))
+                    .map((row) => {
+                      const entry = row.entry;
+                      const quota = getQuota(entry);
+                      return {
+                        row,
+                        quotaStatus: quota?.status ?? 'idle',
+                        error: quota?.error,
+                        errorStatus: quota?.errorStatus,
+                        canRefresh: canUseActions && !entry.file.disabled,
+                        onRefresh: () => void refreshQuota(entry.file, QUOTA_ADAPTERS[entry.type]),
+                        details: renderCard(entry, null, true),
+                      };
+                    })}
+                />
+              ))}
+            {gridItems.length > 0 && (
+              <div className={styles.grid}>
+                {gridItems.map((entry, index) => renderCard(entry, cardEntranceDelay(index)))}
+              </div>
+            )}
+          </>
         )}
 
         {!loading && filteredEntries.length > QUOTA_PAGE_SIZE && (

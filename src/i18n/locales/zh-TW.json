@@ -1631,7 +1631,15 @@
     "status_next": "候補",
     "status_reserve": "保留",
     "status_capped": "已封頂",
-    "priority_hint": "路由優先級：可用憑證中優先級最高者處理請求"
+    "priority_hint": "路由優先級：可用憑證中優先級最高者處理請求",
+    "used_percent": "已用 {{used}}%",
+    "threshold_hint": "路由閾值 {{threshold}}%",
+    "five_hour": "5 小時",
+    "weekly": "每週",
+    "ranked_by_priority": "依路由優先級排序",
+    "loading": "正在載入用量…",
+    "refresh_account": "重新整理 {{name}} 的額度",
+    "details": "詳情"
   },
   "plugin_management": {
     "title": "插件管理",

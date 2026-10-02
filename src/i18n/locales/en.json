@@ -1607,7 +1607,15 @@
     "status_next": "Next",
     "status_reserve": "Reserve",
     "status_capped": "Capped",
-    "priority_hint": "Routing priority — the highest usable priority serves requests"
+    "priority_hint": "Routing priority — the highest usable priority serves requests",
+    "used_percent": "{{used}}% used",
+    "threshold_hint": "Routing threshold {{threshold}}%",
+    "five_hour": "5-hour",
+    "weekly": "Weekly",
+    "ranked_by_priority": "ranked by routing priority",
+    "loading": "Loading usage…",
+    "refresh_account": "Refresh quota for {{name}}",
+    "details": "Details"
   },
   "plugin_management": {
     "title": "Plugin Management",
