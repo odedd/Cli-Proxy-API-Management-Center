@@ -5,7 +5,6 @@
  */
 
 import { useTranslation } from 'react-i18next';
-import { IconRefreshCw } from '@/components/ui/icons';
 import type { ResolvedTheme } from '@/types';
 import { buildResetDisplay, resolveQuotaErrorMessage } from '@/utils/quota';
 import { getQuotaDisplayName } from '@/utils/quota/identity';
@@ -25,8 +24,6 @@ export type RoutingRowsItem = {
   quotaStatus: 'idle' | 'loading' | 'success' | 'error';
   error?: string;
   errorStatus?: number;
-  canRefresh: boolean;
-  onRefresh: () => void;
 };
 
 export type RoutingRowsProps = {
@@ -138,8 +135,15 @@ export function RoutingRows({ type, items, resolvedTheme, now, showEmails }: Rou
                   </div>
                 </div>
 
-                {item.quotaStatus === 'success' ? (
+                {row.loaded ? (
                   <>
+                    {meter(
+                      'weekly',
+                      t('quota_routing.weekly'),
+                      row.weekly,
+                      WEEKLY_RESERVE_PERCENT,
+                      t('quota_routing.no_weekly_reset')
+                    )}
                     {meter(
                       'five',
                       t('quota_routing.five_hour'),
@@ -149,13 +153,6 @@ export function RoutingRows({ type, items, resolvedTheme, now, showEmails }: Rou
                         ? t('quota_routing.five_hour_none')
                         : t('quota_routing.five_hour_idle')
                     )}
-                    {meter(
-                      'weekly',
-                      t('quota_routing.weekly'),
-                      row.weekly,
-                      WEEKLY_RESERVE_PERCENT,
-                      t('quota_routing.no_weekly_reset')
-                    )}
                   </>
                 ) : (
                   <div
@@ -164,31 +161,17 @@ export function RoutingRows({ type, items, resolvedTheme, now, showEmails }: Rou
                   >
                     {item.quotaStatus === 'loading'
                       ? t('quota_routing.loading')
-                      : item.quotaStatus === 'error'
-                        ? resolveQuotaErrorMessage(
-                            t,
-                            item.errorStatus,
-                            item.error || t('common.unknown_error')
-                          )
-                        : t('quota_routing.not_loaded')}
+                      : item.quotaStatus === 'error' && item.errorStatus === 429
+                        ? t('quota_routing.rate_limited')
+                        : item.quotaStatus === 'error'
+                          ? resolveQuotaErrorMessage(
+                              t,
+                              item.errorStatus,
+                              item.error || t('common.unknown_error')
+                            )
+                          : t('quota_routing.not_loaded')}
                   </div>
                 )}
-
-                <div className={styles.actions}>
-                  <button
-                    type="button"
-                    className={styles.iconButton}
-                    onClick={item.onRefresh}
-                    disabled={!item.canRefresh || item.quotaStatus === 'loading'}
-                    aria-label={t('quota_routing.refresh_account', { name: email ?? name })}
-                    title={t('auth_files.quota_refresh_hint')}
-                  >
-                    <IconRefreshCw
-                      size={15}
-                      className={item.quotaStatus === 'loading' ? styles.spinning : undefined}
-                    />
-                  </button>
-                </div>
               </div>
             </li>
           );

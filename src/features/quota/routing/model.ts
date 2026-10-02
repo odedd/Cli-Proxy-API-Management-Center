@@ -12,12 +12,15 @@
 
 import type { AuthFileItem } from '@/types';
 import type { QuotaFileEntry } from '../logic';
+import { readObservedUsage } from './signals';
 
 export const ROUTED_PROVIDERS = ['claude', 'codex'] as const;
 export type RoutedProvider = (typeof ROUTED_PROVIDERS)[number];
 
 export const WEEKLY_RESERVE_PERCENT = 95;
 export const FIVE_HOUR_CAP_PERCENT = 95;
+/** Observed usage younger than this wins over the usage endpoint. */
+export const OBSERVED_FRESH_MS = 30 * 60_000;
 
 export type RoutingStatus = 'serving' | 'next' | 'reserve' | 'capped' | 'unknown';
 
@@ -35,8 +38,14 @@ export interface RoutingWindow {
 export interface RoutingRow {
   entry: QuotaFileEntry;
   priority: number;
-  /** Usage was fetched successfully. */
+  /** Usage is known, from either source. */
   loaded: boolean;
+  /** `live`: rate-limit headers the backend observed; `api`: the provider's usage endpoint. */
+  source: 'live' | 'api' | null;
+  /** When the live usage was observed (epoch ms). */
+  observedAtMs: number | null;
+  /** The provider itself reported the credential as blocked. */
+  blocked: boolean;
   status: RoutingStatus;
   fiveHour: RoutingWindow | null;
   weekly: RoutingWindow | null;
@@ -80,6 +89,7 @@ function readWindow(quota: RoutedQuota, id: string | null, now: number): Routing
 
 function usageStatus(row: Omit<RoutingRow, 'status'>): RoutingStatus {
   if (!row.loaded) return 'unknown';
+  if (row.blocked) return 'capped';
   const weekly = row.weekly?.usedPercent ?? 0;
   const fiveHour = row.fiveHour?.usedPercent ?? 0;
   if (weekly >= 100 || fiveHour >= FIVE_HOUR_CAP_PERCENT) return 'capped';
@@ -103,13 +113,30 @@ export function buildRoutingSummary(
     .sort(compareRoutingOrder)
     .map((entry) => {
       const quota = quotaFor(entry);
-      const loaded = quota?.status === 'success';
+      const fetched = quota?.status === 'success' ? quota : null;
+      const observed = readObservedUsage(type, entry.file, now);
+      // Fresh live usage first, then the endpoint, then any live usage at all.
+      const useLive =
+        observed !== null && (now - observed.observedAtMs < OBSERVED_FRESH_MS || !fetched);
       const base = {
         entry,
         priority: credentialPriority(entry.file),
-        loaded,
-        fiveHour: loaded && quota ? readWindow(quota, ids.fiveHour, now) : null,
-        weekly: loaded && quota ? readWindow(quota, ids.weekly, now) : null,
+        loaded: useLive || fetched !== null,
+        source: useLive ? ('live' as const) : fetched ? ('api' as const) : null,
+        observedAtMs: observed?.observedAtMs ?? null,
+        blocked: useLive && observed ? observed.limited || observed.fiveHourRejected : false,
+        fiveHour:
+          useLive && observed
+            ? observed.fiveHour
+            : fetched
+              ? readWindow(fetched, ids.fiveHour, now)
+              : null,
+        weekly:
+          useLive && observed
+            ? observed.weekly
+            : fetched
+              ? readWindow(fetched, ids.weekly, now)
+              : null,
       };
       return { ...base, status: usageStatus(base) };
     });

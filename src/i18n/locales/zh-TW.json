@@ -1638,9 +1638,9 @@
     "weekly": "每週",
     "ranked_by_priority": "依路由優先級排序",
     "loading": "正在載入用量…",
-    "refresh_account": "重新整理 {{name}} 的額度",
     "show_emails": "顯示信箱",
-    "hide_emails": "隱藏信箱"
+    "hide_emails": "隱藏信箱",
+    "rate_limited": "用量介面被限流，暫無近期即時用量"
   },
   "plugin_management": {
     "title": "插件管理",

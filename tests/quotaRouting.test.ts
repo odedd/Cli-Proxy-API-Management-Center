@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { sortQuotaEntries, type QuotaFileEntry } from '@/features/quota/logic';
+import { readObservedUsage } from '@/features/quota/routing/signals';
 import {
   buildRoutingSummary,
   credentialPriority,
@@ -155,5 +156,79 @@ describe('priority sort mode', () => {
       'codex-z.json',
       'kimi-a.json',
     ]);
+  });
+});
+
+describe('observed (live) usage', () => {
+  const claudeSignals = (
+    fiveHour: string,
+    weekly: string,
+    observedAgoMs = 60_000,
+    status5h = 'allowed'
+  ) => ({
+    signals: {
+      'Anthropic-Ratelimit-Unified-5h-Utilization': fiveHour,
+      'Anthropic-Ratelimit-Unified-5h-Reset': String((NOW + 2 * HOUR) / 1000),
+      'Anthropic-Ratelimit-Unified-5h-Status': status5h,
+      'Anthropic-Ratelimit-Unified-7d-Utilization': weekly,
+      'Anthropic-Ratelimit-Unified-7d-Reset': String((NOW + 40 * HOUR) / 1000),
+    },
+    observed_at: new Date(NOW - observedAgoMs).toISOString(),
+  });
+
+  test('parses Claude fractions and Codex windows from recorded headers', () => {
+    const claudeUsage = readObservedUsage(
+      'claude',
+      { name: 'c', quota: claudeSignals('0.35', '0.5') } as unknown as AuthFileItem,
+      NOW
+    );
+    expect(claudeUsage?.fiveHour?.usedPercent).toBeCloseTo(35);
+    expect(claudeUsage?.weekly?.usedPercent).toBeCloseTo(50);
+    expect(claudeUsage?.weekly?.resetAtMs).toBe(NOW + 40 * HOUR);
+
+    const codexUsage = readObservedUsage(
+      'codex',
+      {
+        name: 'x',
+        quota: {
+          signals: {
+            'X-Codex-Primary-Used-Percent': '92',
+            'X-Codex-Primary-Window-Minutes': '10080',
+            'X-Codex-Primary-Reset-After-Seconds': '3600',
+          },
+          observed_at: new Date(NOW).toISOString(),
+        },
+      } as unknown as AuthFileItem,
+      NOW
+    );
+    expect(codexUsage?.fiveHour).toBeNull();
+    expect(codexUsage?.weekly).toEqual({ usedPercent: 92, resetAtMs: NOW + HOUR });
+    expect(readObservedUsage('claude', { name: 'n' } as AuthFileItem, NOW)).toBeNull();
+  });
+
+  test('fresh live usage wins over the endpoint and fills in when the endpoint failed', () => {
+    const live = entry('a.json', 'claude', { priority: 100, quota: claudeSignals('0.10', '0.20') });
+    const failed: ClaudeQuotaState = { status: 'error', windows: [], errorStatus: 429 };
+    const summary = buildRoutingSummary('claude', [live], () => failed, NOW);
+    expect(summary.rows[0].source).toBe('live');
+    expect(summary.rows[0].weekly?.usedPercent).toBeCloseTo(20);
+    expect(summary.loadedCount).toBe(1);
+
+    const stale = entry('b.json', 'claude', { quota: claudeSignals('0.10', '0.20', 2 * HOUR) });
+    const fetched = buildRoutingSummary('claude', [stale], () => claude(40, 60), NOW);
+    expect(fetched.rows[0].source).toBe('api');
+    expect(fetched.rows[0].weekly?.usedPercent).toBe(60);
+  });
+
+  test('a rejected 5-hour window caps the credential', () => {
+    const entries = [
+      entry('a.json', 'claude', {
+        priority: 100,
+        quota: claudeSignals('0.5', '0.2', 1000, 'rejected'),
+      }),
+      entry('b.json', 'claude', { priority: 99, quota: claudeSignals('0.1', '0.2') }),
+    ];
+    const summary = buildRoutingSummary('claude', entries, () => undefined, NOW);
+    expect(summary.rows.map((r) => r.status)).toEqual(['capped', 'serving']);
   });
 });

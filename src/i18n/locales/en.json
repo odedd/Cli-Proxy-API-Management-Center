@@ -1614,9 +1614,9 @@
     "weekly": "Weekly",
     "ranked_by_priority": "ranked by routing priority",
     "loading": "Loading usage…",
-    "refresh_account": "Refresh quota for {{name}}",
     "show_emails": "Show emails",
-    "hide_emails": "Hide emails"
+    "hide_emails": "Hide emails",
+    "rate_limited": "Usage endpoint rate limited — no recent live usage"
   },
   "plugin_management": {
     "title": "Plugin Management",

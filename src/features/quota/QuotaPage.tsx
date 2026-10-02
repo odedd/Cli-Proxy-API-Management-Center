@@ -64,6 +64,8 @@ import { readQuotaUiState, writeQuotaUiState } from './uiState';
 import styles from './QuotaPage.module.scss';
 
 const TAB_IDS: string[] = ['all', ...QUOTA_TAB_ORDER];
+/** Credentials-list poll for live usage and script-set priorities (local call only). */
+const LIVE_POLL_MS = 30_000;
 const SKELETON_CARD_COUNT = 6;
 
 /**
@@ -133,6 +135,35 @@ export function QuotaPage() {
   }, [connectionStatus, sessionGeneration, t]);
 
   useHeaderRefresh(loadFiles);
+
+  /* 静默轮询文件列表：后端在每次代理请求后记录的实时用量（quota.signals）与
+   * 优先级脚本改写的 priority 都随列表下发——本地请求，不触达上游用量接口。 */
+  const pollFiles = useCallback(async () => {
+    if (connectionStatus !== 'connected') return;
+    const requestId = listRequestRef.current;
+    const generation = useQuotaStore.getState().cacheGeneration;
+    try {
+      const data = await authFilesApi.list();
+      // A full load or a session switch started meanwhile owns the list.
+      if (
+        requestId !== listRequestRef.current ||
+        generation !== useQuotaStore.getState().cacheGeneration
+      ) {
+        return;
+      }
+      setFiles(data?.files || []);
+    } catch {
+      // Keep the last list; the next tick retries.
+    }
+  }, [connectionStatus]);
+
+  useEffect(() => {
+    if (loading || error) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void pollFiles();
+    }, LIVE_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [error, loading, pollFiles]);
 
   useEffect(() => {
     void loadFiles();
@@ -312,9 +343,23 @@ export function QuotaPage() {
         disableControls
       )
     ) {
-      void loadQuota(pageItems);
+      // Routed rows read live usage from the list; their usage endpoints are rate limited.
+      void loadQuota(
+        effectiveSort === 'priority'
+          ? pageItems.filter((entry) => !isRoutedProvider(entry.type))
+          : pageItems
+      );
     }
-  }, [disableControls, error, filesGeneration, loading, loadQuota, pageItems, sessionGeneration]);
+  }, [
+    disableControls,
+    effectiveSort,
+    error,
+    filesGeneration,
+    loading,
+    loadQuota,
+    pageItems,
+    sessionGeneration,
+  ]);
 
   useDevinQuotaAutoLoad(
     pageItems,
@@ -525,8 +570,6 @@ export function QuotaPage() {
                         quotaStatus: quota?.status ?? 'idle',
                         error: quota?.error,
                         errorStatus: quota?.errorStatus,
-                        canRefresh: canUseActions && !entry.file.disabled,
-                        onRefresh: () => void refreshQuota(entry.file, QUOTA_ADAPTERS[entry.type]),
                       };
                     })}
                 />

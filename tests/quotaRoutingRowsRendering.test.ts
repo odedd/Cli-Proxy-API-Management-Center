@@ -57,8 +57,6 @@ describe('RoutingRows', () => {
     const items: RoutingRowsItem[] = summary.rows.map((row) => ({
       row,
       quotaStatus: 'success',
-      canRefresh: true,
-      onRefresh: () => undefined,
     }));
 
     const html = renderToStaticMarkup(
@@ -78,7 +76,7 @@ describe('RoutingRows', () => {
     expect(html).toContain('33% used');
     expect(html).toContain('98% used');
     expect(html).toContain('No window running');
-    expect(html).toContain('aria-label="Refresh quota for top@example.com"');
+    expect(html).not.toContain('Refresh quota');
   });
 
   test('shows the load error instead of meters', () => {
@@ -99,8 +97,6 @@ describe('RoutingRows', () => {
             row: summary.rows[0],
             quotaStatus: 'error',
             error: 'boom',
-            canRefresh: true,
-            onRefresh: () => undefined,
           },
         ],
       })
@@ -109,6 +105,24 @@ describe('RoutingRows', () => {
     expect(html).toContain('boom');
     expect(html).not.toContain('% used');
     expect(html).toContain('x•••@example.com');
+
+    const limited = renderToStaticMarkup(
+      createElement(RoutingRows, {
+        type: 'claude',
+        resolvedTheme: 'light',
+        now,
+        showEmails: false,
+        items: [
+          {
+            row: summary.rows[0],
+            quotaStatus: 'error',
+            error: 'Rate limited',
+            errorStatus: 429,
+          },
+        ],
+      })
+    );
+    expect(limited).toContain('rate limited');
     expect(html).not.toContain('x@example.com');
   });
 });

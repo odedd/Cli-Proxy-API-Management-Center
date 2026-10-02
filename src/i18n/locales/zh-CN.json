@@ -1612,9 +1612,9 @@
     "weekly": "每周",
     "ranked_by_priority": "按路由优先级排序",
     "loading": "正在加载用量…",
-    "refresh_account": "刷新 {{name}} 的额度",
     "show_emails": "显示邮箱",
-    "hide_emails": "隐藏邮箱"
+    "hide_emails": "隐藏邮箱",
+    "rate_limited": "用量接口被限流，暂无近期实时用量"
   },
   "plugin_management": {
     "title": "插件管理",

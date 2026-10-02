@@ -1617,9 +1617,9 @@
     "weekly": "Неделя",
     "ranked_by_priority": "по приоритету маршрутизации",
     "loading": "Загрузка использования…",
-    "refresh_account": "Обновить квоту для {{name}}",
     "show_emails": "Показать email",
-    "hide_emails": "Скрыть email"
+    "hide_emails": "Скрыть email",
+    "rate_limited": "Эндпоинт использования ограничен — нет свежих данных"
   },
   "plugin_management": {
     "title": "Управление плагинами",
