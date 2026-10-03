@@ -44,14 +44,18 @@ const quota = (fiveHour: number | null, weekly: number): ClaudeQuotaState => ({
 });
 
 describe('RoutingRows', () => {
-  test('renders ranked rows with pills, priorities and used-percent meters', () => {
+  test('renders ordered accounts and weekly-first meters without status or priority labels', () => {
     const entries = [
+      entry('d.json', 'cap@example.com', 97),
+      entry('c.json', 'res@example.com', 98),
+      entry('b.json', 'next@example.com', 99),
       entry('a.json', 'top@example.com', 100),
-      entry('b.json', 'res@example.com', 99),
     ];
     const states: Record<string, ClaudeQuotaState> = {
       'a.json': quota(33, 50),
-      'b.json': quota(null, 98),
+      'b.json': quota(45, 60),
+      'c.json': quota(null, 98),
+      'd.json': quota(97, 20),
     };
     const summary = buildRoutingSummary('claude', entries, (e) => states[e.file.name], now);
     const items: RoutingRowsItem[] = summary.rows.map((row) => ({
@@ -69,10 +73,19 @@ describe('RoutingRows', () => {
       })
     );
 
-    expect(html.indexOf('top@example.com')).toBeLessThan(html.indexOf('res@example.com'));
-    expect(html).toContain('Serving');
-    expect(html).toContain('Reserve');
-    expect(html).toContain('p100');
+    const emails = ['top@example.com', 'next@example.com', 'res@example.com', 'cap@example.com'];
+    emails.forEach((email, index) => {
+      expect(html).toContain(email);
+      if (index > 0) expect(html.indexOf(emails[index - 1])).toBeLessThan(html.indexOf(email));
+    });
+    for (const label of ['Serving', 'Next', 'Reserve', 'Capped', 'p100', 'p99', 'p98', 'p97']) {
+      expect(html).not.toContain(label);
+    }
+    const weekly = i18n.t('quota_routing.weekly');
+    const fiveHour = i18n.t('quota_routing.five_hour');
+    expect(html).toContain(weekly);
+    expect(html).toContain(fiveHour);
+    expect(html.indexOf(weekly)).toBeLessThan(html.indexOf(fiveHour));
     expect(html).toContain('33% used');
     expect(html).toContain('98% used');
     expect(html).toContain('No window running');

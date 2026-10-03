@@ -1,6 +1,6 @@
 /**
- * Ranked rows for one routed provider: rank, account, routing pill, then the two
- * windows routing decides on (5-hour, weekly) as used-percent meters with the
+ * Ranked rows for one routed provider: rank, account, then the two windows
+ * routing decides on (weekly, 5-hour) as used-percent meters with the
  * 95% thresholds marked.
  */
 
@@ -121,16 +121,6 @@ export function RoutingRows({ type, items, resolvedTheme, now, showEmails }: Rou
                   <div className={styles.accountText}>
                     <span className={styles.accountName} title={getQuotaDisplayName(file)}>
                       {email ?? getQuotaDisplayName(file)}
-                    </span>
-                    <span className={styles.accountMeta}>
-                      {row.status !== 'unknown' && (
-                        <span className={`${styles.pill} ${styles[`pill_${row.status}`]}`}>
-                          {t(`quota_routing.status_${row.status}`)}
-                        </span>
-                      )}
-                      <span className={styles.priority} title={t('quota_routing.priority_hint')}>
-                        p{row.priority}
-                      </span>
                     </span>
                   </div>
                 </div>
