@@ -4,7 +4,10 @@
  * generation-guarded commit、成功/失败通知），仅把 config 换成 adapter。
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { apiClient } from '@/services/api/client';
+import { useAuthStore } from '@/stores/useAuthStore';
+import { createQuotaResetGuard } from './resetQuotaGuard';
 import { useTranslation } from 'react-i18next';
 import {
   captureQuotaCacheGeneration,
@@ -20,8 +23,30 @@ import { getQuotaMap, getQuotaSetter, type QuotaAdapter, type QuotaCardState } f
 const getQuotaState = (adapter: QuotaAdapter, file: AuthFileItem): QuotaCardState | undefined =>
   getQuotaMap(adapter)[getQuotaCacheKey(file)];
 
-export function useQuotaActions(disableControls: boolean) {
+export function useQuotaActions(disableControls: boolean, files?: AuthFileItem[]) {
   const { t } = useTranslation();
+  const context = useRef({ disableControls, files });
+  const mounted = useRef(true);
+  useEffect(() => {
+    context.current = { disableControls, files };
+  }, [disableControls, files]);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const resetGuard = useRef<ReturnType<typeof createQuotaResetGuard> | null>(null);
+  useEffect(() => {
+    if (resetGuard.current) return;
+    resetGuard.current = createQuotaResetGuard({
+      files: () => context.current.files,
+      disabled: () => context.current.disableControls || !mounted.current,
+      connected: () => useAuthStore.getState().connectionStatus === 'connected',
+      revision: () => apiClient.getConnectionRevision(),
+      now: () => Date.now(),
+    });
+  }, []);
   const showNotification = useNotificationStore((state) => state.showNotification);
   const showConfirmation = useNotificationStore((state) => state.showConfirmation);
   const [resettingQuotaName, setResettingQuotaName] = useState<string | null>(null);
@@ -76,7 +101,20 @@ export function useQuotaActions(disableControls: boolean) {
       if (disableControls || file.disabled) return;
       const cacheKey = getQuotaCacheKey(file);
       if (getQuotaState(adapter, file)?.status === 'loading') return;
-      if (resettingQuotaName === cacheKey) return;
+      if (resettingQuotaName !== null) return;
+      const guard = resetGuard.current;
+      if (!guard) return;
+      const origin = guard.capture(
+        file,
+        adapter.type === 'codex'
+          ? undefined
+          : (current) => {
+              const quota = getQuotaState(adapter, current);
+              return Boolean(quota?.status === 'success' && adapter.canResetQuota?.(quota));
+            }
+      );
+      if (!origin.current()) return;
+      const cacheGeneration = captureQuotaCacheGeneration(file.name);
 
       showConfirmation({
         title: t('codex_quota.reset_confirm_title'),
@@ -84,11 +122,12 @@ export function useQuotaActions(disableControls: boolean) {
         confirmText: t('codex_quota.reset_confirm_button'),
         variant: 'primary',
         onConfirm: async () => {
-          const cacheGeneration = captureQuotaCacheGeneration(file.name);
+          if (!guard.acquire(origin)) return;
           const setQuota = getQuotaSetter(adapter);
           setResettingQuotaName(cacheKey);
           try {
             const data = await resetQuotaFn(file, t);
+            if (!origin.sameIdentity() || !mounted.current) return;
             commitIfQuotaCacheCurrent(cacheGeneration, () => {
               setQuota((prev) => ({
                 ...prev,
@@ -97,6 +136,7 @@ export function useQuotaActions(disableControls: boolean) {
               showNotification(t('codex_quota.reset_success', { name: file.name }), 'success');
             });
           } catch (err: unknown) {
+            if (!origin.sameIdentity() || !mounted.current) return;
             const message = err instanceof Error ? err.message : t('common.unknown_error');
             commitIfQuotaCacheCurrent(cacheGeneration, () => {
               showNotification(
@@ -105,12 +145,13 @@ export function useQuotaActions(disableControls: boolean) {
               );
             });
           } finally {
+            guard.release();
             setResettingQuotaName((current) => (current === cacheKey ? null : current));
           }
         },
       });
     },
-    [disableControls, resettingQuotaName, showConfirmation, showNotification, t]
+    [disableControls, resettingQuotaName, resetGuard, showConfirmation, showNotification, t]
   );
 
   return { resettingQuotaName, refreshQuota, resetQuota };

@@ -24,6 +24,7 @@ import { QUOTA_ADAPTERS, type QuotaCardState } from '../providers';
 import { isQuotaRefreshDisabled, type QuotaFileEntry } from '../logic';
 import { useClaudeResetGrants } from '../providers/claude/ClaudeResetGrants';
 import type { RoutingRow } from '../routing/model';
+import { resolveQuotaResetEligibility } from '../routing/codexResetPresentation';
 import bodyStyles from './QuotaBody.module.scss';
 import styles from './QuotaCard.module.scss';
 
@@ -36,6 +37,8 @@ export type QuotaCardProps = {
   resolvedTheme: ResolvedTheme;
   canRefresh: boolean;
   resetting: boolean;
+  /** Codex reset eligibility comes from the shared, fresh credit observation. */
+  resetAllowed?: boolean;
   /** 首屏级联入场延迟；null = 不入场（切 tab / 翻页 / 刷新新挂载的卡片）。 */
   entranceDelayMs?: number | null;
   /** Routing position for routed providers (Claude, Codex); absent elsewhere. */
@@ -88,7 +91,7 @@ export function QuotaCard(props: QuotaCardProps) {
     status === 'success' &&
     Boolean(adapter.resetQuota) &&
     quota !== undefined &&
-    Boolean(adapter.canResetQuota?.(quota));
+    resolveQuotaResetEligibility(Boolean(adapter.canResetQuota?.(quota)), props.resetAllowed);
 
   return (
     <article

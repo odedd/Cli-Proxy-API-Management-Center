@@ -99,6 +99,41 @@
   font-variant-numeric: tabular-nums;
 }
 
+.resetActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.resetButton {
+  min-height: 24px;
+  padding: 2px 6px;
+  font-size: 12px;
+}
+
+.resetDetails {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  overflow-wrap: anywhere;
+
+  summary {
+    cursor: pointer;
+    width: fit-content;
+
+    &:focus-visible {
+      outline: 2px solid var(--primary-color);
+      outline-offset: 2px;
+    }
+  }
+
+  ul {
+    margin: 6px 0 0;
+    padding-left: 16px;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
 .meter {
   flex: 1 1 200px;
   display: flex;

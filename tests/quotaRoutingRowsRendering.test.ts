@@ -161,6 +161,103 @@ describe('RoutingRows', () => {
     expect(codex).not.toContain('resets banked');
   });
 
+  test('Codex shows server reset count with expiry details independently of passive usage', () => {
+    const codexEntry: QuotaFileEntry = {
+      type: 'codex',
+      file: { name: 'private@example.com.json', provider: 'codex', email: 'private@example.com' },
+    };
+    const summary = buildRoutingSummary('codex', [codexEntry], () => undefined, now);
+    const html = renderToStaticMarkup(
+      createElement(RoutingRows, {
+        type: 'codex',
+        resolvedTheme: 'dark',
+        now,
+        showEmails: false,
+        items: [
+          {
+            row: summary.rows[0],
+            quotaStatus: 'idle',
+            codexReset: {
+              availableCount: 3,
+              credits: [
+                {
+                  id: 'one',
+                  status: 'available',
+                  grantedAt: '',
+                  expiresAt: new Date(now + HOUR).toISOString(),
+                },
+              ],
+              canReset: true,
+              onReset: () => undefined,
+            },
+          },
+        ],
+      })
+    );
+    expect(html).toContain('3 resets banked');
+    expect(html).not.toContain('1 resets banked');
+    expect(html).toContain('Manual reset expiry');
+    expect(html).toContain('Reset 1');
+    expect(html).toContain('<button');
+    expect(html).not.toContain('disabled=""');
+    expect(html).toContain('aria-label="Reset quota: p•••@example.com (1)"');
+    expect(html).not.toContain('private@example.com');
+    expect(html).not.toContain('Refresh quota');
+    expect(html).not.toContain('pill');
+  });
+
+  test.each([
+    { count: null, canReset: true, want: '— resets banked' },
+    { count: 0, canReset: true, want: '0 resets banked' },
+    { count: 2, canReset: false, want: '2 resets banked' },
+    { count: 2, canReset: true, stale: true, want: '2 resets banked' },
+    { count: 2, canReset: true, loading: true, want: '2 resets banked' },
+    { count: 2, canReset: true, busy: true, want: '2 resets banked' },
+    { count: 2, canReset: true, disabled: true, want: '2 resets banked' },
+  ])('Codex reset cannot be used for an unavailable count or action state %j', (fixture) => {
+    const codexEntry: QuotaFileEntry = {
+      type: 'codex',
+      file: { name: 'codex.json', provider: 'codex', email: 'safe@example.com' },
+    };
+    const summary = buildRoutingSummary('codex', [codexEntry], () => quota(20, 30), now);
+    codexEntry.file.disabled = fixture.disabled;
+    const html = renderToStaticMarkup(
+      createElement(RoutingRows, {
+        type: 'codex',
+        resolvedTheme: 'light',
+        now,
+        showEmails: false,
+        items: [
+          {
+            row: summary.rows[0],
+            quotaStatus: 'success',
+            codexReset: {
+              availableCount: fixture.count,
+              credits: [
+                {
+                  id: 'one',
+                  status: 'available',
+                  grantedAt: '',
+                  expiresAt: new Date(now + HOUR).toISOString(),
+                },
+              ],
+              canReset: fixture.canReset,
+              stale: fixture.stale,
+              loading: fixture.loading,
+              busy: fixture.busy,
+              onReset: () => undefined,
+            },
+          },
+        ],
+      })
+    );
+    expect(html).toContain(fixture.want);
+    expect(html).toContain('disabled=""');
+    expect(html.indexOf(fixture.want)).toBeLessThan(html.indexOf('Weekly'));
+    if (fixture.stale) expect(html).toContain('Stale');
+    if (fixture.loading || fixture.busy) expect(html).toContain('aria-busy="true"');
+  });
+
   test('shows the load error instead of meters', () => {
     const summary = buildRoutingSummary(
       'claude',

@@ -26,6 +26,13 @@ export interface ClaudeResetGrantSnapshot {
   error?: AnthropicResetGrantErrorCode;
 }
 
+export interface CodexResetCreditSnapshot {
+  connectionRevision: number;
+  data?: import('@/features/quota/providers/codex/data').CodexResetCreditsData;
+  updatedAt?: number;
+  error?: boolean;
+}
+
 type QuotaUpdater<T> = T | ((prev: T) => T);
 
 interface QuotaStoreState {
@@ -36,6 +43,8 @@ interface QuotaStoreState {
   claudeResetGrants: Record<string, ClaudeResetGrantSnapshot>;
   setClaudeResetGrants: (updater: QuotaUpdater<Record<string, ClaudeResetGrantSnapshot>>) => void;
   codexQuota: Record<string, CodexQuotaState>;
+  codexResetCredits: Record<string, CodexResetCreditSnapshot>;
+  setCodexResetCredits: (updater: QuotaUpdater<Record<string, CodexResetCreditSnapshot>>) => void;
   devinQuota: Record<string, DevinQuotaState>;
   kimiQuota: Record<string, KimiQuotaState>;
   metaQuota: Record<string, MetaQuotaState>;
@@ -64,6 +73,7 @@ export const useQuotaStore = create<QuotaStoreState>((set) => ({
   claudeQuota: {},
   claudeResetGrants: {},
   codexQuota: {},
+  codexResetCredits: {},
   devinQuota: {},
   kimiQuota: {},
   metaQuota: {},
@@ -79,6 +89,10 @@ export const useQuotaStore = create<QuotaStoreState>((set) => ({
   setClaudeResetGrants: (updater) =>
     set((state) => ({
       claudeResetGrants: resolveUpdater(updater, state.claudeResetGrants),
+    })),
+  setCodexResetCredits: (updater) =>
+    set((state) => ({
+      codexResetCredits: resolveUpdater(updater, state.codexResetCredits),
     })),
   setCodexQuota: (updater) =>
     set((state) => ({
@@ -122,6 +136,7 @@ export const useQuotaStore = create<QuotaStoreState>((set) => ({
           claudeQuota: omitNames(state.claudeQuota),
           claudeResetGrants: omitNames(state.claudeResetGrants),
           codexQuota: omitNames(state.codexQuota),
+          codexResetCredits: omitNames(state.codexResetCredits),
           devinQuota: omitNames(state.devinQuota),
           kimiQuota: omitNames(state.kimiQuota),
           metaQuota: omitNames(state.metaQuota),
@@ -135,6 +150,7 @@ export const useQuotaStore = create<QuotaStoreState>((set) => ({
         claudeQuota: {},
         claudeResetGrants: {},
         codexQuota: {},
+        codexResetCredits: {},
         devinQuota: {},
         kimiQuota: {},
         metaQuota: {},

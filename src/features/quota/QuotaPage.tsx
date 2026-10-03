@@ -14,6 +14,11 @@ import { authFilesApi } from '@/services/api';
 import { apiClient } from '@/services/api/client';
 import { useClaudeResetGrantReads } from './providers/claude/useClaudeResetGrantReads';
 import { getClaudeResetGrantKey } from './providers/claude/resetGrantRequests';
+import { useCodexResetCreditReads } from './providers/codex/useCodexResetCreditReads';
+import {
+  getCodexResetCreditKey,
+  isCodexResetCreditSnapshotFresh,
+} from './providers/codex/resetCreditRequests';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { IconSearch, IconX } from '@/components/ui/icons';
@@ -60,6 +65,7 @@ import {
   type RoutingProviderSummary,
 } from './routing/model';
 import { RoutingRows } from './routing/RoutingRows';
+import { getCodexRoutingResetPresentation } from './routing/codexResetPresentation';
 import { RoutingSummary } from './routing/RoutingSummary';
 import { useRoutedQuotaAutoLoad } from './routing/useRoutedQuotaAutoLoad';
 import { useQuotaBatchLoader } from './hooks/useQuotaBatchLoader';
@@ -231,6 +237,10 @@ export function QuotaPage() {
     () => filteredEntries.filter((entry) => entry.type === 'claude').map((entry) => entry.file),
     [filteredEntries]
   );
+  const codexFiles = useMemo(
+    () => filteredEntries.filter((entry) => entry.type === 'codex').map((entry) => entry.file),
+    [filteredEntries]
+  );
   /* ---------- 路由视图（Claude / Codex） ----------
    * 基于全部条目而非当前页：服务中的凭证可能不在本页。 */
   const routingNow = useNow();
@@ -293,9 +303,14 @@ export function QuotaPage() {
   }, [entries, quotaByType]);
 
   // 剪枝：文件列表落定后，各 provider 缓存只保留仍存在的凭证
-  const resetIdentitiesRef = useRef<{ session: number; keys: Map<string, string> }>({
+  const resetIdentitiesRef = useRef<{
+    session: number;
+    claudeKeys: Map<string, string>;
+    codexKeys: Map<string, string>;
+  }>({
     session: sessionGeneration,
-    keys: new Map(),
+    claudeKeys: new Map(),
+    codexKeys: new Map(),
   });
   useEffect(() => {
     if (loading || error || filesGeneration !== sessionGeneration) return;
@@ -309,16 +324,39 @@ export function QuotaPage() {
         .filter((entry) => entry.type === 'claude')
         .map((entry) => [entry.file.name, getClaudeResetGrantKey(entry.file)])
     );
+    const codexResetIdentities = new Map(
+      entries
+        .filter((entry) => entry.type === 'codex')
+        .map((entry) => [entry.file.name, getCodexResetCreditKey(entry.file)])
+    );
     if (resetIdentitiesRef.current.session === sessionGeneration) {
-      const replaced = Array.from(resetIdentitiesRef.current.keys)
-        .filter(([name, key]) => resetIdentities.get(name) !== key)
-        .map(([name]) => name);
-      if (replaced.length > 0) useQuotaStore.getState().clearQuotaCache(replaced);
+      const replaced = [
+        ...Array.from(resetIdentitiesRef.current.claudeKeys).filter(
+          ([name, key]) => resetIdentities.get(name) !== key
+        ),
+        ...Array.from(resetIdentitiesRef.current.codexKeys).filter(
+          ([name, key]) => codexResetIdentities.get(name) !== key
+        ),
+      ].map(([name]) => name);
+      if (replaced.length > 0) useQuotaStore.getState().clearQuotaCache([...new Set(replaced)]);
     }
-    resetIdentitiesRef.current = { session: sessionGeneration, keys: resetIdentities };
+    resetIdentitiesRef.current = {
+      session: sessionGeneration,
+      claudeKeys: resetIdentities,
+      codexKeys: codexResetIdentities,
+    };
     const resetSurvivors = new Set(resetIdentities.values());
     useQuotaStore.getState().setClaudeResetGrants((prev) => {
       const staleKeys = Object.keys(prev).filter((key) => !resetSurvivors.has(key));
+      if (staleKeys.length === 0) return prev;
+      const next = { ...prev };
+      staleKeys.forEach((key) => delete next[key]);
+      return next;
+    });
+
+    const codexResetSurvivors = new Set(codexResetIdentities.values());
+    useQuotaStore.getState().setCodexResetCredits((prev) => {
+      const staleKeys = Object.keys(prev).filter((key) => !codexResetSurvivors.has(key));
       if (staleKeys.length === 0) return prev;
       const next = { ...prev };
       staleKeys.forEach((key) => delete next[key]);
@@ -343,10 +381,16 @@ export function QuotaPage() {
     !disableControls && !loading && !error && filesGeneration === sessionGeneration
   );
 
+  // Credit-only reads also run when the auth list already contains fresh passive usage.
+  const { snapshots: codexResetCredits, now: codexResetNow } = useCodexResetCreditReads(
+    codexFiles,
+    !disableControls && !loading && !error && filesGeneration === sessionGeneration
+  );
+
   /* ---------- 加载与操作 ---------- */
 
   const { batchLoading, loadQuota } = useQuotaBatchLoader();
-  const { resettingQuotaName, refreshQuota, resetQuota } = useQuotaActions(disableControls);
+  const { resettingQuotaName, refreshQuota, resetQuota } = useQuotaActions(disableControls, files);
 
   const pendingRefreshRef = useRef<number | null>(null);
   const prevLoadingRef = useRef(loading);
@@ -418,7 +462,8 @@ export function QuotaPage() {
     loadQuota
   );
 
-  const canUseActions = !disableControls && !loading && filesGeneration === sessionGeneration;
+  const canUseActions =
+    !disableControls && !loading && !error && filesGeneration === sessionGeneration;
 
   /* ---------- 首屏卡片一次性级联入场 ----------
    * 首批数据渲染后立即翻转 cardsAnimated；已挂载的卡片在挂载时捕获过自己的
@@ -460,6 +505,25 @@ export function QuotaPage() {
       resolvedTheme={resolvedTheme}
       canRefresh={canUseActions && !entry.file.disabled}
       resetting={resettingQuotaName === getQuotaCacheKey(entry.file)}
+      resetAllowed={
+        entry.type === 'codex'
+          ? getCodexRoutingResetPresentation(
+              entry.file,
+              codexResetCredits[getCodexResetCreditKey(entry.file)],
+              {
+                now: codexResetNow,
+                connectionRevision: apiClient.getConnectionRevision(),
+                fresh: isCodexResetCreditSnapshotFresh(
+                  codexResetCredits[getCodexResetCreditKey(entry.file)],
+                  codexResetNow
+                ),
+                canUseActions: canUseActions && resettingQuotaName === null,
+                busy: resettingQuotaName === getQuotaCacheKey(entry.file),
+                onReset: () => {},
+              }
+            ).canReset
+          : undefined
+      }
       entranceDelayMs={entranceDelayMs}
       routing={routingByName.get(entry.file.name)}
       onRefresh={() => void refreshQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
@@ -602,11 +666,35 @@ export function QuotaPage() {
                     .map((row) => {
                       const entry = row.entry;
                       const quota = getQuota(entry);
-                      const resets = resetGrants[getClaudeResetGrantKey(entry.file)];
+                      const connectionRevision = apiClient.getConnectionRevision();
+                      const resets =
+                        entry.type === 'claude'
+                          ? resetGrants[getClaudeResetGrantKey(entry.file)]
+                          : undefined;
+                      const creditSnapshot =
+                        entry.type === 'codex'
+                          ? codexResetCredits[getCodexResetCreditKey(entry.file)]
+                          : undefined;
+                      const currentCredits =
+                        creditSnapshot?.connectionRevision === connectionRevision
+                          ? creditSnapshot
+                          : undefined;
                       return {
                         resetGrants:
-                          resets?.connectionRevision === apiClient.getConnectionRevision()
-                            ? resets
+                          resets?.connectionRevision === connectionRevision ? resets : undefined,
+                        codexReset:
+                          entry.type === 'codex'
+                            ? getCodexRoutingResetPresentation(entry.file, currentCredits, {
+                                now: codexResetNow,
+                                connectionRevision,
+                                fresh: Boolean(
+                                  currentCredits &&
+                                  isCodexResetCreditSnapshotFresh(currentCredits, codexResetNow)
+                                ),
+                                canUseActions: canUseActions && resettingQuotaName === null,
+                                busy: resettingQuotaName === getQuotaCacheKey(entry.file),
+                                onReset: () => resetQuota(entry.file, QUOTA_ADAPTERS.codex),
+                              })
                             : undefined,
                         row,
                         quotaStatus: quota?.status ?? 'idle',

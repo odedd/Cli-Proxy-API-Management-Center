@@ -6,10 +6,13 @@
 
 import { useTranslation } from 'react-i18next';
 import type { ResolvedTheme } from '@/types';
+import { Button } from '@/components/ui/Button';
+import { resolveTimeZoneLabel } from '@/utils/time/timezone';
 import type { ClaudeResetGrantSnapshot } from '@/stores/useQuotaStore';
+import type { CodexResetPresentation } from './codexResetPresentation';
 import { bankedClaudeResets } from '../providers/claude/selectResetGrant';
 import { CLAUDE_RESET_GRANT_TTL_MS } from '../providers/claude/resetGrantRequests';
-import { buildResetDisplay, resolveQuotaErrorMessage } from '@/utils/quota';
+import { buildResetDisplay, parseIsoToMs, resolveQuotaErrorMessage } from '@/utils/quota';
 import { getQuotaDisplayName } from '@/utils/quota/identity';
 import { getAuthFileIcon, getTypeLabel } from '@/features/authFiles/constants';
 import {
@@ -28,6 +31,7 @@ export type RoutingRowsItem = {
   error?: string;
   errorStatus?: number;
   resetGrants?: ClaudeResetGrantSnapshot;
+  codexReset?: CodexResetPresentation;
 };
 
 export type RoutingRowsProps = {
@@ -112,6 +116,19 @@ export function RoutingRows({ type, items, resolvedTheme, now, showEmails }: Rou
           const name = file.name;
           const rawEmail = typeof file.email === 'string' && file.email.trim() ? file.email : null;
           const email = rawEmail && !showEmails ? maskEmail(rawEmail) : rawEmail;
+          const displayName =
+            email ??
+            (showEmails ? getQuotaDisplayName(file) : maskEmail(getQuotaDisplayName(file)));
+          const codexReset = type === 'codex' ? item.codexReset : undefined;
+          const codexBusy = Boolean(codexReset?.busy || codexReset?.loading);
+          const codexCanReset = Boolean(
+            codexReset?.canReset &&
+            codexReset.availableCount !== null &&
+            codexReset.availableCount > 0 &&
+            !codexReset.stale &&
+            !codexBusy &&
+            !file.disabled
+          );
           const balance = bankedClaudeResets(item.resetGrants?.data, now);
           const updatedAt = item.resetGrants?.updatedAt;
           const stale =
@@ -136,9 +153,83 @@ export function RoutingRows({ type, items, resolvedTheme, now, showEmails }: Rou
                     {index + 1}
                   </span>
                   <div className={styles.accountText}>
-                    <span className={styles.accountName} title={getQuotaDisplayName(file)}>
-                      {email ?? getQuotaDisplayName(file)}
+                    <span className={styles.accountName} title={displayName}>
+                      {displayName}
                     </span>
+                    {codexReset && (
+                      <>
+                        <div className={styles.resetActions}>
+                          <span
+                            className={styles.bankedResets}
+                            title={[
+                              t(
+                                codexReset.availableCount === null
+                                  ? 'codex_quota.banked_unknown'
+                                  : 'codex_quota.banked_hint'
+                              ),
+                              codexReset.stale ? t('codex_quota.banked_stale') : '',
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          >
+                            {t('codex_quota.banked_count', {
+                              count: codexReset.availableCount ?? '—',
+                            })}
+                            {codexReset.stale && ` · ${t('codex_quota.banked_stale')}`}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className={styles.resetButton}
+                            disabled={!codexCanReset}
+                            loading={codexBusy}
+                            aria-busy={codexBusy}
+                            aria-label={t('codex_quota.reset_account_label', {
+                              name: displayName,
+                              index: index + 1,
+                            })}
+                            onClick={() => {
+                              if (codexCanReset) codexReset.onReset();
+                            }}
+                          >
+                            {t('codex_quota.reset_button')}
+                          </Button>
+                        </div>
+                        {codexReset.credits.length > 0 && (
+                          <details className={styles.resetDetails}>
+                            <summary>
+                              {t('codex_quota.reset_credits_expiry_label', {
+                                timezone: resolveTimeZoneLabel(),
+                              })}
+                            </summary>
+                            <ul>
+                              {codexReset.credits.map((credit, creditIndex) => {
+                                const expiry = buildResetDisplay(
+                                  credit.expiresAt,
+                                  parseIsoToMs(credit.expiresAt),
+                                  now,
+                                  i18n.resolvedLanguage
+                                );
+                                return (
+                                  <li key={credit.id || creditIndex}>
+                                    {t('codex_quota.reset_credit_number', {
+                                      index: creditIndex + 1,
+                                    })}
+                                    {' · '}
+                                    {expiry
+                                      ? [expiry.relative, expiry.absolute]
+                                          .filter(Boolean)
+                                          .join(' · ')
+                                      : '—'}
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </details>
+                        )}
+                      </>
+                    )}
                     {type === 'claude' && (
                       <span
                         className={styles.bankedResets}

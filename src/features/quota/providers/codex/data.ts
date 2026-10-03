@@ -38,15 +38,21 @@ import {
   isDisabledAuthFile,
 } from '@/utils/quota';
 import { normalizeAuthIndex } from '@/utils/authIndex';
+import { parseResetGrantRetryAfter } from '@/services/api/claudeResetGrants';
 import type { QuotaProviderData } from '../types';
+import { codexResetCreditFetcher } from './resetCreditRequests';
+import { apiClient } from '@/services/api/client';
+import { captureQuotaCacheGeneration, commitIfQuotaCacheCurrent } from '@/stores/useQuotaStore';
 
 const CODEX_OPTIONAL_REQUEST_TIMEOUT_MS = 8000;
 
-type CodexResetCreditsData = {
+export type CodexResetCreditsData = {
   availableCount: number | null;
   applicableAvailableCount: number | null;
   credits: CodexRateLimitResetCredit[];
   error: string;
+  httpStatus?: number;
+  retryAfterSeconds?: number;
 };
 
 export type CodexQuotaData = {
@@ -384,6 +390,12 @@ const fetchCodexResetCredits = async (
         applicableAvailableCount: null,
         credits: [],
         error: getApiCallErrorMessage(result),
+        httpStatus: result.statusCode,
+        retryAfterSeconds: parseResetGrantRetryAfter(
+          Object.entries(result.header).find(
+            ([key]) => key.toLowerCase() === 'retry-after'
+          )?.[1]?.[0]
+        ),
       };
     }
 
@@ -411,6 +423,44 @@ const fetchCodexResetCredits = async (
       error: err instanceof Error ? err.message : t('common.unknown_error'),
     };
   }
+};
+
+/** Credit-only observations never load or overwrite usage windows. */
+export const fetchCodexResetCreditStatus = async (
+  file: AuthFileItem,
+  t: TFunction
+): Promise<CodexResetCreditsData> => {
+  const unavailable = (): CodexResetCreditsData => ({
+    availableCount: null,
+    applicableAvailableCount: null,
+    credits: [],
+    error: 'upstream',
+  });
+  const authIndex = normalizeAuthIndex(file.auth_index ?? file.authIndex);
+  if (!authIndex || isDisabledAuthFile(file)) return unavailable();
+  const result = await fetchCodexResetCredits(authIndex, buildCodexRequestHeader(file), t);
+  const validCount = (count: number | null) =>
+    count === null || (Number.isInteger(count) && count >= 0);
+  if (
+    result.error ||
+    !validCount(result.availableCount) ||
+    !validCount(result.applicableAvailableCount)
+  ) {
+    return {
+      ...unavailable(),
+      httpStatus:
+        Number.isInteger(result.httpStatus) &&
+        result.httpStatus! >= 100 &&
+        result.httpStatus! <= 599
+          ? result.httpStatus
+          : undefined,
+      retryAfterSeconds:
+        Number.isFinite(result.retryAfterSeconds) && result.retryAfterSeconds! >= 0
+          ? result.retryAfterSeconds
+          : undefined,
+    };
+  }
+  return result;
 };
 
 const fetchCodexQuota = async (file: AuthFileItem, t: TFunction): Promise<CodexQuotaData> => {
@@ -448,7 +498,13 @@ const fetchCodexQuota = async (file: AuthFileItem, t: TFunction): Promise<CodexQ
   const accountCredits = normalizeCodexAccountCredits(payload.credits);
   const resetCredits = payload.rate_limit_reset_credits ?? payload.rateLimitResetCredits ?? null;
   const usageResetCreditsData = normalizeCodexResetCreditsPayload(resetCredits);
-  const resetCreditsData = await fetchCodexResetCredits(authIndex, requestHeader, t);
+  const resetSnapshot = await codexResetCreditFetcher.read(file);
+  const resetCreditsData: CodexResetCreditsData = {
+    availableCount: resetSnapshot?.data?.availableCount ?? null,
+    applicableAvailableCount: resetSnapshot?.data?.applicableAvailableCount ?? null,
+    credits: resetSnapshot?.data?.credits ?? [],
+    error: resetSnapshot?.error ? t('common.unknown_error') : '',
+  };
   const resetCreditsCountFromDetails =
     resetCreditsData.credits.length > 0 ? resetCreditsData.credits.length : null;
   const rateLimitResetCreditsAvailableCount =
@@ -515,7 +571,16 @@ const consumeCodexRateLimitResetCredit = async (
 };
 
 const resetCodexQuota = async (file: AuthFileItem, t: TFunction): Promise<CodexQuotaData> => {
-  await consumeCodexRateLimitResetCredit(file, t);
+  const generation = captureQuotaCacheGeneration(file.name);
+  const revision = apiClient.getConnectionRevision();
+  try {
+    await consumeCodexRateLimitResetCredit(file, t);
+  } finally {
+    // An ambiguous consumption outcome must not retain a spendable old balance.
+    if (apiClient.getConnectionRevision() === revision) {
+      commitIfQuotaCacheCurrent(generation, () => codexResetCreditFetcher.invalidate(file));
+    }
+  }
   return fetchCodexQuota(file, t);
 };
 
