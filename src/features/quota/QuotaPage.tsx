@@ -11,6 +11,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { authFilesApi } from '@/services/api';
+import { apiClient } from '@/services/api/client';
+import { useClaudeResetGrantReads } from './providers/claude/useClaudeResetGrantReads';
+import { getClaudeResetGrantKey } from './providers/claude/resetGrantRequests';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { IconSearch, IconX } from '@/components/ui/icons';
@@ -224,6 +227,10 @@ export function QuotaPage() {
     () => filterEntriesBySearch(filterEntriesByTab(entries, tab), search),
     [entries, tab, search]
   );
+  const claudeFiles = useMemo(
+    () => filteredEntries.filter((entry) => entry.type === 'claude').map((entry) => entry.file),
+    [filteredEntries]
+  );
   /* ---------- 路由视图（Claude / Codex） ----------
    * 基于全部条目而非当前页：服务中的凭证可能不在本页。 */
   const routingNow = useNow();
@@ -286,12 +293,37 @@ export function QuotaPage() {
   }, [entries, quotaByType]);
 
   // 剪枝：文件列表落定后，各 provider 缓存只保留仍存在的凭证
+  const resetIdentitiesRef = useRef<{ session: number; keys: Map<string, string> }>({
+    session: sessionGeneration,
+    keys: new Map(),
+  });
   useEffect(() => {
     if (loading || error || filesGeneration !== sessionGeneration) return;
     const survivorsByType = new Map<QuotaProviderType, Set<string>>(
       QUOTA_TAB_ORDER.map((type) => [type, new Set<string>()])
     );
     entries.forEach((entry) => survivorsByType.get(entry.type)?.add(getQuotaCacheKey(entry.file)));
+
+    const resetIdentities = new Map(
+      entries
+        .filter((entry) => entry.type === 'claude')
+        .map((entry) => [entry.file.name, getClaudeResetGrantKey(entry.file)])
+    );
+    if (resetIdentitiesRef.current.session === sessionGeneration) {
+      const replaced = Array.from(resetIdentitiesRef.current.keys)
+        .filter(([name, key]) => resetIdentities.get(name) !== key)
+        .map(([name]) => name);
+      if (replaced.length > 0) useQuotaStore.getState().clearQuotaCache(replaced);
+    }
+    resetIdentitiesRef.current = { session: sessionGeneration, keys: resetIdentities };
+    const resetSurvivors = new Set(resetIdentities.values());
+    useQuotaStore.getState().setClaudeResetGrants((prev) => {
+      const staleKeys = Object.keys(prev).filter((key) => !resetSurvivors.has(key));
+      if (staleKeys.length === 0) return prev;
+      const next = { ...prev };
+      staleKeys.forEach((key) => delete next[key]);
+      return next;
+    });
 
     QUOTA_TAB_ORDER.forEach((type) => {
       const survivors = survivorsByType.get(type) ?? new Set<string>();
@@ -305,6 +337,11 @@ export function QuotaPage() {
       });
     });
   }, [entries, error, filesGeneration, loading, sessionGeneration]);
+
+  const resetGrants = useClaudeResetGrantReads(
+    claudeFiles,
+    !disableControls && !loading && !error && filesGeneration === sessionGeneration
+  );
 
   /* ---------- 加载与操作 ---------- */
 
@@ -565,7 +602,12 @@ export function QuotaPage() {
                     .map((row) => {
                       const entry = row.entry;
                       const quota = getQuota(entry);
+                      const resets = resetGrants[getClaudeResetGrantKey(entry.file)];
                       return {
+                        resetGrants:
+                          resets?.connectionRevision === apiClient.getConnectionRevision()
+                            ? resets
+                            : undefined,
                         row,
                         quotaStatus: quota?.status ?? 'idle',
                         error: quota?.error,

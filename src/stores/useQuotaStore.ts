@@ -14,6 +14,18 @@ import type {
   XaiQuotaState,
 } from '@/types';
 
+import type {
+  AnthropicResetGrantErrorCode,
+  AnthropicResetGrantStatus,
+} from '@/services/api/claudeResetGrants';
+
+export interface ClaudeResetGrantSnapshot {
+  connectionRevision: number;
+  data?: AnthropicResetGrantStatus;
+  updatedAt?: number;
+  error?: AnthropicResetGrantErrorCode;
+}
+
 type QuotaUpdater<T> = T | ((prev: T) => T);
 
 interface QuotaStoreState {
@@ -21,6 +33,8 @@ interface QuotaStoreState {
   fileGenerations: Record<string, number>;
   antigravityQuota: Record<string, AntigravityQuotaState>;
   claudeQuota: Record<string, ClaudeQuotaState>;
+  claudeResetGrants: Record<string, ClaudeResetGrantSnapshot>;
+  setClaudeResetGrants: (updater: QuotaUpdater<Record<string, ClaudeResetGrantSnapshot>>) => void;
   codexQuota: Record<string, CodexQuotaState>;
   devinQuota: Record<string, DevinQuotaState>;
   kimiQuota: Record<string, KimiQuotaState>;
@@ -48,6 +62,7 @@ export const useQuotaStore = create<QuotaStoreState>((set) => ({
   fileGenerations: {},
   antigravityQuota: {},
   claudeQuota: {},
+  claudeResetGrants: {},
   codexQuota: {},
   devinQuota: {},
   kimiQuota: {},
@@ -60,6 +75,10 @@ export const useQuotaStore = create<QuotaStoreState>((set) => ({
   setClaudeQuota: (updater) =>
     set((state) => ({
       claudeQuota: resolveUpdater(updater, state.claudeQuota),
+    })),
+  setClaudeResetGrants: (updater) =>
+    set((state) => ({
+      claudeResetGrants: resolveUpdater(updater, state.claudeResetGrants),
     })),
   setCodexQuota: (updater) =>
     set((state) => ({
@@ -101,6 +120,7 @@ export const useQuotaStore = create<QuotaStoreState>((set) => ({
           fileGenerations,
           antigravityQuota: omitNames(state.antigravityQuota),
           claudeQuota: omitNames(state.claudeQuota),
+          claudeResetGrants: omitNames(state.claudeResetGrants),
           codexQuota: omitNames(state.codexQuota),
           devinQuota: omitNames(state.devinQuota),
           kimiQuota: omitNames(state.kimiQuota),
@@ -113,6 +133,7 @@ export const useQuotaStore = create<QuotaStoreState>((set) => ({
         fileGenerations: {},
         antigravityQuota: {},
         claudeQuota: {},
+        claudeResetGrants: {},
         codexQuota: {},
         devinQuota: {},
         kimiQuota: {},

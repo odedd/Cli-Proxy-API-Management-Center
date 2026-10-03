@@ -6,6 +6,9 @@
 
 import { useTranslation } from 'react-i18next';
 import type { ResolvedTheme } from '@/types';
+import type { ClaudeResetGrantSnapshot } from '@/stores/useQuotaStore';
+import { bankedClaudeResets } from '../providers/claude/selectResetGrant';
+import { CLAUDE_RESET_GRANT_TTL_MS } from '../providers/claude/resetGrantRequests';
 import { buildResetDisplay, resolveQuotaErrorMessage } from '@/utils/quota';
 import { getQuotaDisplayName } from '@/utils/quota/identity';
 import { getAuthFileIcon, getTypeLabel } from '@/features/authFiles/constants';
@@ -24,6 +27,7 @@ export type RoutingRowsItem = {
   quotaStatus: 'idle' | 'loading' | 'success' | 'error';
   error?: string;
   errorStatus?: number;
+  resetGrants?: ClaudeResetGrantSnapshot;
 };
 
 export type RoutingRowsProps = {
@@ -108,6 +112,19 @@ export function RoutingRows({ type, items, resolvedTheme, now, showEmails }: Rou
           const name = file.name;
           const rawEmail = typeof file.email === 'string' && file.email.trim() ? file.email : null;
           const email = rawEmail && !showEmails ? maskEmail(rawEmail) : rawEmail;
+          const balance = bankedClaudeResets(item.resetGrants?.data, now);
+          const updatedAt = item.resetGrants?.updatedAt;
+          const stale =
+            balance !== null &&
+            (Boolean(item.resetGrants?.error) ||
+              updatedAt === undefined ||
+              now - updatedAt >= CLAUDE_RESET_GRANT_TTL_MS);
+          const updated =
+            updatedAt === undefined
+              ? ''
+              : t('claude_reset.banked_updated', {
+                  updated: new Date(updatedAt).toLocaleString(i18n.resolvedLanguage),
+                });
           return (
             <li
               key={name}
@@ -122,6 +139,25 @@ export function RoutingRows({ type, items, resolvedTheme, now, showEmails }: Rou
                     <span className={styles.accountName} title={getQuotaDisplayName(file)}>
                       {email ?? getQuotaDisplayName(file)}
                     </span>
+                    {type === 'claude' && (
+                      <span
+                        className={styles.bankedResets}
+                        title={[
+                          t(
+                            balance === null
+                              ? 'claude_reset.banked_unknown'
+                              : 'claude_reset.banked_hint'
+                          ),
+                          stale ? t('claude_reset.banked_stale') : '',
+                          updated,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      >
+                        {t('claude_reset.banked_count', { count: balance ?? '—' })}
+                        {stale && ` · ${t('claude_reset.banked_stale')}`}
+                      </span>
+                    )}
                   </div>
                 </div>
 

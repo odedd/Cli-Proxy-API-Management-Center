@@ -64,10 +64,48 @@ export type AnthropicResetGrantErrorCode = 'auth' | 'upstream' | 'malformed';
 
 /** A read failure. `message` is fixed text; upstream detail is never attached. */
 export class AnthropicResetGrantError extends Error {
-  constructor(readonly code: AnthropicResetGrantErrorCode) {
+  readonly httpStatus?: number;
+  readonly retryAfterSeconds?: number;
+
+  constructor(
+    readonly code: AnthropicResetGrantErrorCode,
+    httpStatus?: number,
+    retryAfterSeconds?: number
+  ) {
     super(`Anthropic reset-grant read failed (${code})`);
     this.name = 'AnthropicResetGrantError';
+    if (Number.isInteger(httpStatus) && httpStatus! >= 100 && httpStatus! <= 599)
+      this.httpStatus = httpStatus;
+    if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds! >= 0)
+      this.retryAfterSeconds = retryAfterSeconds;
   }
+}
+
+/** RFC Retry-After: nonnegative delta seconds or an HTTP date, never upstream text. */
+export function parseResetGrantRetryAfter(value: string | undefined, now = Date.now()) {
+  const text = value?.trim();
+  if (!text) return undefined;
+  if (/^\d+$/.test(text)) {
+    const seconds = Number(text);
+    return Number.isFinite(seconds) ? seconds : undefined;
+  }
+  // Do not let Date.parse interpret malformed numeric delays as dates.
+  if (!/^[A-Za-z]{3}, /.test(text)) return undefined;
+  const at = Date.parse(text);
+  return Number.isFinite(at) ? Math.max(0, Math.ceil((at - now) / 1000)) : undefined;
+}
+
+function readRetryAfter(headers: Record<string, unknown> | undefined) {
+  const value = Object.entries(headers ?? {}).find(
+    ([key]) => key.toLowerCase() === 'retry-after'
+  )?.[1];
+  return parseResetGrantRetryAfter(
+    typeof value === 'string'
+      ? value
+      : Array.isArray(value) && typeof value[0] === 'string'
+        ? value[0]
+        : undefined
+  );
 }
 
 /** The claim was sent (or may have been) and no terminal answer came back. */
@@ -236,19 +274,33 @@ export function anthropicResetGrantBlocker(
 }
 
 async function readAccount(authIndex: string, path: string): Promise<Record<string, unknown>> {
-  const response = await apiCallApi.request(
-    {
-      authIndex,
-      method: 'GET',
-      url: ANTHROPIC_API_ORIGIN + path,
-      header: { ...CLAUDE_REQUEST_HEADERS },
-    },
-    { timeout: 12000 }
-  );
-  if (response.statusCode < 200 || response.statusCode >= 300 || !isRecord(response.body)) {
-    throw new AnthropicResetGrantError('upstream');
+  try {
+    const response = await apiCallApi.request(
+      {
+        authIndex,
+        method: 'GET',
+        url: ANTHROPIC_API_ORIGIN + path,
+        header: { ...CLAUDE_REQUEST_HEADERS },
+      },
+      { timeout: 12000 }
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw new AnthropicResetGrantError(
+        response.statusCode === 401 || response.statusCode === 403 ? 'auth' : 'upstream',
+        response.statusCode,
+        readRetryAfter(response.header)
+      );
+    }
+    if (!isRecord(response.body)) throw new AnthropicResetGrantError('malformed');
+    return response.body;
+  } catch (error: unknown) {
+    if (error instanceof AnthropicResetGrantError) throw error;
+    const status = isRecord(error) && typeof error.status === 'number' ? error.status : undefined;
+    throw new AnthropicResetGrantError(
+      status === 401 || status === 403 ? 'auth' : 'upstream',
+      status
+    );
   }
-  return response.body;
 }
 
 export async function readClaudeResetGrants(authIndex: string) {

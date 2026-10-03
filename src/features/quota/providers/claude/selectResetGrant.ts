@@ -3,6 +3,22 @@ import {
   type AnthropicResetGrantStatus,
 } from '@/services/api/claudeResetGrants';
 
+/** Balance is not availability: shared scopes count once; paused grants remain banked. */
+export function bankedClaudeResets(
+  status: AnthropicResetGrantStatus | null | undefined,
+  now: number
+) {
+  if (!status) return null;
+  return status.grants.reduce(
+    (sum, grant) =>
+      (!grant.startsAt || Date.parse(grant.startsAt) <= now) &&
+      (!grant.endsAt || Date.parse(grant.endsAt) > now)
+        ? sum + grant.resetsLeft
+        : sum,
+    0
+  );
+}
+
 /** Prefer the upstream recommendation; otherwise use stable ID ordering. */
 export function selectResetGrant(status: AnthropicResetGrantStatus, now: number) {
   if (status.cooldownUntil && Date.parse(status.cooldownUntil) > now) return undefined;

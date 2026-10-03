@@ -2258,6 +2258,11 @@
     }
   },
   "claude_reset": {
+    "banked_count": "儲備 {{count}} 次重置",
+    "banked_unknown": "無法讀取重置餘額，未知不等於零。",
+    "banked_hint": "目前有效權益的餘額，共享用量視窗只計一次。儲備次數不代表現在可用。",
+    "banked_stale": "資料已過期",
+    "banked_updated": "更新於 {{updated}}",
     "retry_confirm": "使用原請求 ID 重試「{{name}}」結果未知的重置？可能已消耗一次重置。請在 10 分鐘內重試；請勿重新載入頁面或在其他分頁發起新請求。",
     "remaining": "剩餘重置次數",
     "title": "儲備重置次數",

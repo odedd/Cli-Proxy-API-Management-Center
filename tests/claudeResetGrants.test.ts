@@ -8,6 +8,8 @@ import {
   readClaudeOrganization,
   readClaudeResetGrants,
   AnthropicResetGrantUnknownOutcome,
+  AnthropicResetGrantError,
+  parseResetGrantRetryAfter,
   ANTHROPIC_RESET_RESULTS,
   type AnthropicResetSettledCode,
 } from '../src/services/api/claudeResetGrants';
@@ -24,6 +26,36 @@ const status = () => parseAnthropicResetGrantStatus(block)!;
 const originalRequest = apiCallApi.request;
 afterEach(() => {
   apiCallApi.request = originalRequest;
+});
+
+test('read errors expose only sanitized status and Retry-After metadata', async () => {
+  apiCallApi.request = async () => ({
+    statusCode: 429,
+    body: { token: 'secret' },
+    bodyText: 'secret',
+    header: { 'rEtRy-AfTeR': ['0'] },
+  });
+  const error = await readClaudeResetGrants('index').catch((error: unknown) => error);
+  expect(error).toBeInstanceOf(AnthropicResetGrantError);
+  expect(error).toMatchObject({ httpStatus: 429, retryAfterSeconds: 0 });
+  expect(JSON.stringify(error)).not.toContain('secret');
+  expect(String(error)).not.toContain('secret');
+  apiCallApi.request = async () => {
+    throw Object.assign(new Error('secret'), { status: 503 });
+  };
+  const transport = await readClaudeResetGrants('index').catch((error: unknown) => error);
+  expect(transport).toMatchObject({ httpStatus: 503 });
+  expect(String(transport)).not.toContain('secret');
+});
+
+test('Retry-After parses delta seconds and HTTP dates without negative delays', () => {
+  const now = Date.parse('2026-01-01T00:00:00Z');
+  expect(parseResetGrantRetryAfter('0', now)).toBe(0);
+  expect(parseResetGrantRetryAfter('600', now)).toBe(600);
+  expect(parseResetGrantRetryAfter('Thu, 01 Jan 2026 00:10:00 GMT', now)).toBe(600);
+  for (const value of ['bad', '-1', '1.5', 'Infinity', '']) {
+    expect(parseResetGrantRetryAfter(value, now)).toBeUndefined();
+  }
 });
 
 describe('Claude reset grant fail-closed parsing', () => {

@@ -2232,6 +2232,11 @@
     }
   },
   "claude_reset": {
+    "banked_count": "储备 {{count}} 次重置",
+    "banked_unknown": "无法读取重置余额，未知不等于零。",
+    "banked_hint": "当前有效权益的余额，共享用量窗口只计一次。储备次数不代表现在可用。",
+    "banked_stale": "数据已过期",
+    "banked_updated": "更新于 {{updated}}",
     "retry_confirm": "使用原请求 ID 重试“{{name}}”结果未知的重置？可能已消耗一次重置。请在 10 分钟内重试；请勿重新加载页面或在其他标签页发起新请求。",
     "remaining": "剩余重置次数",
     "title": "储备重置次数",

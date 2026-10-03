@@ -6,6 +6,7 @@ import type { QuotaFileEntry } from '@/features/quota/logic';
 import { buildRoutingSummary } from '@/features/quota/routing/model';
 import { RoutingRows, type RoutingRowsItem } from '@/features/quota/routing/RoutingRows';
 import type { AuthFileItem, ClaudeQuotaState } from '@/types';
+import { parseAnthropicResetGrantStatus } from '@/services/api/claudeResetGrants';
 
 const now = Date.now();
 const HOUR = 3_600_000;
@@ -90,6 +91,74 @@ describe('RoutingRows', () => {
     expect(html).toContain('98% used');
     expect(html).toContain('No window running');
     expect(html).not.toContain('Refresh quota');
+  });
+
+  test('Claude balances are plain text, distinguish unknown/zero, and mark known stale reads', () => {
+    const entries = [
+      entry('a.json', 'bank@example.com', 100),
+      entry('b.json', 'zero@example.com', 99),
+      entry('c.json', 'unknown@example.com', 98),
+    ];
+    const summary = buildRoutingSummary('claude', entries, () => quota(20, 30), now);
+    const status = parseAnthropicResetGrantStatus({
+      eligible: true,
+      grants: [
+        {
+          id: 'bank',
+          resets_total: 2,
+          resets_left: 2,
+          paused: true,
+          clears: ['five_hour', 'seven_day'],
+        },
+        { id: 'expired', resets_total: 2, resets_left: 2, ends_at: new Date(now).toISOString() },
+        {
+          id: 'future',
+          resets_total: 2,
+          resets_left: 2,
+          starts_at: new Date(now + HOUR).toISOString(),
+        },
+      ],
+    })!;
+    const items: RoutingRowsItem[] = summary.rows.map((row, index) => ({
+      row,
+      quotaStatus: 'success',
+      resetGrants:
+        index < 2
+          ? {
+              connectionRevision: 1,
+              updatedAt: now - HOUR,
+              data: index === 0 ? status : { ...status, grants: [] },
+              error: 'upstream',
+            }
+          : undefined,
+    }));
+    const html = renderToStaticMarkup(
+      createElement(RoutingRows, {
+        type: 'claude',
+        items,
+        resolvedTheme: 'dark',
+        now,
+        showEmails: true,
+      })
+    );
+    expect(html).toContain('2 resets banked');
+    expect(html).toContain('0 resets banked');
+    expect(html).toContain('— resets banked');
+    expect(html).toContain('Stale');
+    expect(html).not.toContain('<button');
+    expect(html).not.toContain('pill');
+    expect(html.indexOf('bank@example.com')).toBeLessThan(html.indexOf('2 resets banked'));
+    expect(html.indexOf('2 resets banked')).toBeLessThan(html.indexOf('Weekly'));
+    const codex = renderToStaticMarkup(
+      createElement(RoutingRows, {
+        type: 'codex',
+        items,
+        resolvedTheme: 'dark',
+        now,
+        showEmails: true,
+      })
+    );
+    expect(codex).not.toContain('resets banked');
   });
 
   test('shows the load error instead of meters', () => {

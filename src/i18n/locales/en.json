@@ -2234,6 +2234,11 @@
     }
   },
   "claude_reset": {
+    "banked_count": "{{count}} resets banked",
+    "banked_unknown": "Reset balance unavailable. Unknown is not zero.",
+    "banked_hint": "Balance of current grants, counted once across shared usage windows. Banked does not mean usable now.",
+    "banked_stale": "Stale",
+    "banked_updated": "Updated {{updated}}",
     "retry_confirm": "Retry the unknown reset for “{{name}}” with its original request ID? A reset may already have been spent. Retry within 10 minutes; do not reload or start another claim in another tab.",
     "remaining": "Resets remaining",
     "title": "Banked resets",

@@ -1,19 +1,26 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNow } from '@/hooks/useNow';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useNotificationStore } from '@/stores';
 import { apiClient } from '@/services/api/client';
 import {
-  readClaudeResetGrants,
-  type AnthropicResetGrantStatus,
-} from '@/services/api/claudeResetGrants';
+  captureQuotaCacheGeneration,
+  commitIfQuotaCacheCurrent,
+  useQuotaStore,
+} from '@/stores/useQuotaStore';
+import { useClaudeResetGrantReads } from './useClaudeResetGrantReads';
+import {
+  claudeResetGrantFetcher,
+  getClaudeResetGrantKey,
+  isClaudeResetGrantSnapshotFresh,
+} from './resetGrantRequests';
 import type { AuthFileItem } from '@/types';
 import { normalizeAuthIndex } from '@/utils/quota';
 import { resetGrantOperations, RETRY_WINDOW_MS } from './resetGrantOperations';
-import { selectResetGrant } from './selectResetGrant';
+import { bankedClaudeResets, selectResetGrant } from './selectResetGrant';
 
-/** Card-owned reads; the session-scoped journal owns spending and ambiguous retries. */
+/** Shared observations; the session-scoped journal owns spending and ambiguous retries. */
 export function useClaudeResetGrants(
   file: AuthFileItem,
   enabled: boolean,
@@ -29,48 +36,62 @@ export function useClaudeResetGrants(
   const showConfirmation = useNotificationStore((state) => state.showConfirmation);
   const showNotification = useNotificationStore((state) => state.showNotification);
   const now = useNow();
-  const authIndex = normalizeAuthIndex(file.auth_index ?? file.authIndex);
+  const authIndex = normalizeAuthIndex(file.authIndex ?? file.auth_index);
   const key = JSON.stringify([file.name, authIndex]);
-  const [status, setStatus] = useState<AnthropicResetGrantStatus | null>(null);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('');
   const [reload, setReload] = useState(0);
+  const files = useMemo(() => [file], [file]);
+  const readRefreshToken = useMemo(() => [refreshToken, reload], [refreshToken, reload]);
+  const snapshots = useClaudeResetGrantReads(
+    files,
+    enabled && !disabled && sessionActive,
+    readRefreshToken
+  );
+  const snapshot = snapshots[getClaudeResetGrantKey(file)];
+  const status =
+    enabled && sessionActive && snapshot?.connectionRevision === session
+      ? snapshot.data
+      : undefined;
+  const message = snapshot?.connectionRevision === session && snapshot.error ? 'read_error' : '';
+  const cacheGeneration = useQuotaStore((state) => state.cacheGeneration);
+  const fileGeneration = useQuotaStore((state) => state.fileGenerations[file.name] ?? 0);
   const lock = useRef(false);
   const generation = useRef(0);
   useEffect(() => {
-    const version = ++generation.current;
-    setStatus(null);
-    if (!enabled || disabled || !sessionActive || !authIndex) return;
-    let cancelled = false;
-    const current = () =>
-      !cancelled && version === generation.current && session === apiClient.getConnectionRevision();
-    void readClaudeResetGrants(authIndex).then(
-      (result) => {
-        if (current()) {
-          setStatus(result);
-          setMessage('');
-        }
-      },
-      () => {
-        if (current()) setMessage('read_error');
-      }
-    );
+    generation.current += 1;
     return () => {
-      cancelled = true;
       generation.current += 1;
     };
-  }, [authIndex, key, enabled, disabled, sessionActive, session, refreshToken, reload]);
+  }, [
+    key,
+    enabled,
+    disabled,
+    sessionActive,
+    refreshToken,
+    reload,
+    cacheGeneration,
+    fileGeneration,
+  ]);
 
   const operation = resetGrantOperations.inspect(key);
   const pending = operation && !operation.code ? operation : undefined;
   const expired = Boolean(pending && now - pending.createdAt >= RETRY_WINDOW_MS);
   const selected = pending?.grantId ?? (status ? selectResetGrant(status, now)?.id : undefined);
-  const blocked = disabled || !sessionActive || !authIndex || busy || expired || !selected;
+  const blocked =
+    disabled ||
+    !sessionActive ||
+    !authIndex ||
+    busy ||
+    expired ||
+    !selected ||
+    (!pending && (!status || !isClaudeResetGrantSnapshotFresh(snapshot, now)));
   const confirm = () => {
     if (blocked || lock.current || !selected || !authIndex) return;
     const version = generation.current;
-    const current = () =>
-      session === apiClient.getConnectionRevision() && version === generation.current;
+    const cache = captureQuotaCacheGeneration(file.name);
+    const accountCurrent = () =>
+      session === apiClient.getConnectionRevision() && commitIfQuotaCacheCurrent(cache, () => {});
+    const current = () => version === generation.current && accountCurrent();
     showConfirmation({
       title: t('claude_reset.title'),
       message: t(pending ? 'claude_reset.retry_confirm' : 'claude_reset.confirm_text', {
@@ -80,6 +101,16 @@ export function useClaudeResetGrants(
       variant: 'primary',
       onConfirm: async () => {
         if (!current() || lock.current || useAuthStore.getState().connectionStatus !== 'connected')
+          return;
+        const latest = useQuotaStore.getState().claudeResetGrants[getClaudeResetGrantKey(file)];
+        const at = Date.now();
+        if (
+          !pending &&
+          (!latest?.data ||
+            latest.connectionRevision !== session ||
+            !isClaudeResetGrantSnapshotFresh(latest, at) ||
+            selectResetGrant(latest.data, at)?.id !== selected)
+        )
           return;
         lock.current = true;
         setBusy(true);
@@ -105,13 +136,16 @@ export function useClaudeResetGrants(
           // Release the local lock regardless, but never refresh a replacement account.
           setBusy(false);
           setReload((value) => value + 1);
-          if (current()) onRefresh();
+          const refreshCurrent = current();
+          // Even an unmounted card must retire a possibly spent observation.
+          if (accountCurrent()) claudeResetGrantFetcher.invalidate(file);
+          if (refreshCurrent) onRefresh();
         }
       },
     });
   };
   return {
-    count: status?.grants.reduce((sum, grant) => sum + grant.resetsLeft, 0) ?? null,
+    count: bankedClaudeResets(status, now),
     busy,
     blocked,
     confirm,
