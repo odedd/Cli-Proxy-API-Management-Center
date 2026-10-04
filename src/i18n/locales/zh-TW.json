@@ -1638,6 +1638,8 @@
     "status_capped": "已封頂",
     "priority_hint": "路由優先級：可用憑證中優先級最高者處理請求",
     "used_percent": "已用 {{used}}%",
+    "remaining_percent": "剩餘 {{remaining}}%",
+    "remaining_threshold_hint": "路由閾值：剩餘 {{remaining}}%（已用 {{threshold}}%）",
     "threshold_hint": "路由閾值 {{threshold}}%",
     "five_hour": "5 小時",
     "weekly": "每週",

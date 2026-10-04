@@ -1,7 +1,7 @@
 /**
  * Ranked rows for one routed provider: rank, account, then the two windows
- * routing decides on (weekly, 5-hour) as used-percent meters with the
- * 95% thresholds marked.
+ * routing decides on (weekly, 5-hour) as remaining-percent meters with the
+ * equivalent remaining routing thresholds marked.
  */
 
 import { useTranslation } from 'react-i18next';
@@ -23,6 +23,7 @@ import {
   type RoutingWindow,
   type RoutedProvider,
 } from './model';
+import { remainingMeterFill } from './remainingMeter';
 import styles from './RoutingRows.module.scss';
 
 export type RoutingRowsItem = {
@@ -42,9 +43,6 @@ export type RoutingRowsProps = {
   showEmails: boolean;
 };
 
-const usedClass = (used: number, threshold: number): string =>
-  used >= threshold ? styles.fillLow : used >= 70 ? styles.fillMedium : styles.fillHigh;
-
 export function RoutingRows({ type, items, resolvedTheme, now, showEmails }: RoutingRowsProps) {
   const { t, i18n } = useTranslation();
   if (items.length === 0) return null;
@@ -62,34 +60,43 @@ export function RoutingRows({ type, items, resolvedTheme, now, showEmails }: Rou
     threshold: number,
     emptyNote: string
   ) => {
-    const used = window ? Math.round(window.usedPercent) : null;
+    const remaining =
+      window && Number.isFinite(window.usedPercent)
+        ? Math.max(0, Math.min(100, 100 - window.usedPercent))
+        : null;
+    const valueText =
+      remaining === null
+        ? '—'
+        : t('quota_routing.remaining_percent', { remaining: Math.round(remaining) });
     return (
       <div key={key} className={styles.meter}>
         <div className={styles.meterHead}>
           <span className={styles.meterLabel}>{label}</span>
-          <span className={styles.meterValue}>
-            {used === null ? '—' : t('quota_routing.used_percent', { used })}
-          </span>
+          <span className={styles.meterValue}>{valueText}</span>
         </div>
         <div
           className={styles.track}
-          role="meter"
-          aria-label={label}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={used ?? 0}
+          role={remaining === null ? undefined : 'meter'}
+          aria-label={remaining === null ? undefined : label}
+          aria-valuemin={remaining === null ? undefined : 0}
+          aria-valuemax={remaining === null ? undefined : 100}
+          aria-valuenow={remaining === null ? undefined : Math.round(remaining)}
+          aria-valuetext={remaining === null ? undefined : valueText}
         >
-          {used !== null && (
+          {remaining !== null && (
             <span
-              className={`${styles.fill} ${usedClass(used, threshold)}`}
-              style={{ width: `${used}%` }}
+              className={`${styles.fill} ${styles[remainingMeterFill(remaining, threshold)]}`}
+              style={{ width: `${remaining}%` }}
             />
           )}
-          {window && (
+          {remaining !== null && (
             <span
               className={styles.tick}
-              style={{ left: `${threshold}%` }}
-              title={t('quota_routing.threshold_hint', { threshold })}
+              style={{ left: `${100 - threshold}%` }}
+              title={t('quota_routing.remaining_threshold_hint', {
+                remaining: 100 - threshold,
+                threshold,
+              })}
             />
           )}
         </div>

@@ -1612,6 +1612,8 @@
     "status_capped": "已封顶",
     "priority_hint": "路由优先级：可用凭证中优先级最高者处理请求",
     "used_percent": "已用 {{used}}%",
+    "remaining_percent": "剩余 {{remaining}}%",
+    "remaining_threshold_hint": "路由阈值：剩余 {{remaining}}%（已用 {{threshold}}%）",
     "threshold_hint": "路由阈值 {{threshold}}%",
     "five_hour": "5 小时",
     "weekly": "每周",

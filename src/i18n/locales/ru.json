@@ -1617,6 +1617,8 @@
     "status_capped": "Исчерпан",
     "priority_hint": "Приоритет маршрутизации — запросы обслуживает доступная запись с наивысшим приоритетом",
     "used_percent": "использовано {{used}}%",
+    "remaining_percent": "Осталось {{remaining}}%",
+    "remaining_threshold_hint": "Порог маршрутизации: осталось {{remaining}}% (использовано {{threshold}}%)",
     "threshold_hint": "Порог маршрутизации {{threshold}}%",
     "five_hour": "5 часов",
     "weekly": "Неделя",

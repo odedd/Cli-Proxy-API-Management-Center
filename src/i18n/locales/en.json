@@ -1614,6 +1614,8 @@
     "status_capped": "Capped",
     "priority_hint": "Routing priority — the highest usable priority serves requests",
     "used_percent": "{{used}}% used",
+    "remaining_percent": "{{remaining}}% remaining",
+    "remaining_threshold_hint": "Routing threshold: {{remaining}}% remaining ({{threshold}}% used)",
     "threshold_hint": "Routing threshold {{threshold}}%",
     "five_hour": "5-hour",
     "weekly": "Weekly",

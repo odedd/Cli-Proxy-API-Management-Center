@@ -45,6 +45,64 @@ const quota = (fiveHour: number | null, weekly: number): ClaudeQuotaState => ({
 });
 
 describe('RoutingRows', () => {
+  for (const type of ['claude', 'codex'] as const) {
+    const renderWindows = (used: number | null, resetAtMs = now + HOUR) => {
+      const account: QuotaFileEntry = {
+        type,
+        file: { name: `${type}.json`, provider: type },
+      };
+      const state = {
+        status: 'success',
+        windows: ['five-hour', type === 'claude' ? 'seven-day' : 'weekly'].map((id) => ({
+          id,
+          usedPercent: used,
+          resetAtMs,
+        })),
+      };
+      const summary = buildRoutingSummary(type, [account], () => state, now);
+      return renderToStaticMarkup(
+        createElement(RoutingRows, {
+          type,
+          items: [{ row: summary.rows[0], quotaStatus: 'success' }],
+          resolvedTheme: 'light',
+          now,
+          showEmails: false,
+        })
+      );
+    };
+
+    test.each([
+      { used: 0, remaining: 100 },
+      { used: 35, remaining: 65 },
+      { used: 70, remaining: 30 },
+      { used: 70.2, remaining: 29.8 },
+      { used: 94.8, remaining: 5.2 },
+      { used: 95, remaining: 5 },
+      { used: 100, remaining: 0 },
+    ])(`${type} meters show remaining quota for %j`, ({ used, remaining }) => {
+      const html = renderWindows(used);
+      const percent = Math.round(remaining);
+      expect(html.match(/role="meter"/g)).toHaveLength(2);
+      expect(html.match(new RegExp(`aria-valuenow="${percent}"`, 'g'))).toHaveLength(2);
+      expect(html.match(new RegExp(`aria-valuetext="${percent}% remaining"`, 'g'))).toHaveLength(2);
+      expect(html).toContain(`width:${100 - used}%`);
+      expect(html.match(/left:5%/g)).toHaveLength(2);
+      expect(html).toContain('5% remaining (95% used)');
+    });
+
+    test.each([null, now - 1])(
+      `${type} unknown or expired windows are not full remaining meters %j`,
+      (missing) => {
+        const html = missing === null ? renderWindows(null) : renderWindows(0, missing);
+        expect(html).toContain('—');
+        expect(html).not.toContain('role="meter"');
+        expect(html).not.toContain('aria-valuenow');
+        expect(html).not.toContain('width:100%');
+        expect(html).not.toContain('left:5%');
+      }
+    );
+  }
+
   test('renders ordered accounts and weekly-first meters without status or priority labels', () => {
     const entries = [
       entry('d.json', 'cap@example.com', 97),
@@ -87,8 +145,8 @@ describe('RoutingRows', () => {
     expect(html).toContain(weekly);
     expect(html).toContain(fiveHour);
     expect(html.indexOf(weekly)).toBeLessThan(html.indexOf(fiveHour));
-    expect(html).toContain('33% used');
-    expect(html).toContain('98% used');
+    expect(html).toContain('67% remaining');
+    expect(html).toContain('2% remaining');
     expect(html).toContain('No window running');
     expect(html).not.toContain('Refresh quota');
   });
@@ -282,7 +340,7 @@ describe('RoutingRows', () => {
     );
     expect(html).toContain('role="alert"');
     expect(html).toContain('boom');
-    expect(html).not.toContain('% used');
+    expect(html).not.toContain('role="meter"');
     expect(html).toContain('x•••@example.com');
 
     const limited = renderToStaticMarkup(
